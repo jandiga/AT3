@@ -1,0 +1,11 @@
+BEGIN Scheduler
+  CRONJOBS:
+    EVERY Monday 00:00:
+      CALL WeeklyLeaderboardUpdate()
+      CALL CalculateAllTeamScores()
+      CALL ResetWeeklyEffortMetrics()
+
+    EVERY 1st OF MONTH:
+      CALL GradeImportCycle()
+      CALL AcademicScoreUpdates()
+END Scheduler

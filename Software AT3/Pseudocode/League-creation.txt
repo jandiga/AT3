@@ -1,0 +1,80 @@
+BEGIN Draft_System
+
+  CLASS League
+    ATTRIBUTES:
+      leagueID
+      leagueName
+      maxParticipants
+      draftOrder = []  // List of participants in draft order
+      teams = []  // List of teams in league
+      draftPool = []  // Available players for drafting
+      timeLimitPerPick = 30  // Time limit per turn (seconds)
+      isDraftComplete = FALSE
+
+    FUNCTION SetupDraft(maxParticipants, draftType, timeLimit)
+      self.maxParticipants = maxParticipants
+      self.draftOrder = GenerateDraftOrder(draftType)
+      self.timeLimitPerPick = timeLimit
+      self.draftPool = FetchAvailablePlayers()
+    END FUNCTION
+
+  FUNCTION GenerateDraftOrder(draftType)
+      IF draftType == "snake" THEN
+        ORDER participants randomly
+        REVERSE order every round
+      ELSE
+        ORDER participants randomly
+      ENDIF
+      RETURN ordered_list
+    END FUNCTION
+
+  FUNCTION FetchAvailablePlayers()
+      RETURN list of all registered students in the same class/school
+    END FUNCTION
+
+  FUNCTION StartDraft()
+    WHILE draftPool NOT empty AND teams NOT full
+      FOR each participant IN draftOrder
+        CALL TakeTurn(participant)
+      ENDFOR
+    ENDWHILE
+    isDraftComplete = TRUE
+    CALL FinalizeTeams()
+  END FUNCTION
+
+  FUNCTION TakeTurn(participant)
+    DISPLAY available players WITH stats
+    DISPLAY remaining picks for participant
+
+    SET pickTimer = timeLimitPerPick
+    WHILE pickTimer > 0
+      INPUT selectedPlayer
+      IF selectedPlayer IN draftPool THEN
+        ASSIGN selectedPlayer TO participant’s team
+        REMOVE selectedPlayer FROM draftPool
+        DISPLAY selectedPlayer + " added to team."
+        BREAK
+      ELSE
+        DISPLAY "Invalid selection. Choose again."
+      ENDIF
+      DECREMENT pickTimer
+    ENDWHILE
+
+    IF pickTimer == 0 THEN
+      AUTO_ASSIGN best available player TO participant’s team
+    ENDIF
+  END FUNCTION
+
+  FUNCTION FinalizeTeams()
+    DISPLAY "Draft complete. Finalized teams:"
+    FOR each team IN teams
+      DISPLAY team.name + " Roster:"
+      FOR each player IN team.players
+        DISPLAY player.name + " - Stats: " + player.stats
+      ENDFOR
+    ENDFOR
+    LOCK rosters
+    DISPLAY "Leagues officially begin!"
+  END FUNCTION
+
+END Draft_System

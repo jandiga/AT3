@@ -1,0 +1,126 @@
+BEGIN Login\_SignUp\_Process
+
+FUNCTION SignUp()
+    DISPLAY "Sign Up Form"
+    INPUT name
+    INPUT email
+    CALL ValidateEmail(email)
+    INPUT password
+    CALL CheckPasswordStrength(password)
+    INPUT role (Student or Teacher)
+    INPUT classCode (optional)
+
+    ```
+    IF role == "Student" THEN
+        ASSIGN defaultPermissions TO [player_scoring, team_management, league_participation]
+    ELSE IF role == "Teacher" THEN
+      ASSIGN defaultPermissions TO [create_league, manage_league, oversee_teams, monitor_metrics]
+    ENDIF
+
+    STORE (name, email, hash(password), role, classCode, defaultPermissions)
+
+    CALL SendEmailConfirmation(email)
+    DISPLAY "Check your email to confirm your account."
+
+    IF SendEmailConfirmation == TRUE THEN
+      IF role == "Student":
+        CREATE User_Profile_Creation()
+    ```
+END FUNCTION
+
+FUNCTION hash(password)
+  USE bcrypt WITH salt=12
+END FUNCTION
+
+CLASS Session
+  ATTRIBUTES:
+    sessionToken
+    expiry
+    IPValidation
+END CLASS
+
+FUNCTION ValidateEmail(email)
+    IF email NOT in proper format THEN
+    DISPLAY "Invalid email format"
+    RETURN FALSE
+    ENDIF
+    RETURN TRUE
+END FUNCTION
+
+FUNCTION CheckPasswordStrength(password)
+    IF password.length < 8 OR NOT containsSpecialCharacter(password) THEN
+    DISPLAY "Weak password. Use at least 8 characters and include at least 1 special character."
+    RETURN FALSE
+    ENDIF
+    RETURN TRUE
+END FUNCTION
+
+FUNCTION SendEmailConfirmation(email)
+    GENERATE unique\_token
+    STORE unique\_token WITH email
+    SEND email WITH confirmation link (containing unique\_token)
+END FUNCTION
+
+FUNCTION Login()
+    DISPLAY "Login Form"
+    INPUT email
+    INPUT password
+    INPUT rememberMe (optional)
+
+    ```
+    IF ValidateCredentials(email, password) THEN
+      IF CAPTCHA_Passed() THEN
+        REDIRECT user TO dashboard
+      ELSE
+        DISPLAY "Failed CAPTCHA. Please try again."
+      ENDIF
+    ELSE
+      DISPLAY "Invalid email or password."
+    ENDIF
+    ```
+
+END FUNCTION
+
+FUNCTION ValidateCredentials(email, password)
+    FETCH stored\_hashed\_password FROM database USING email
+    IF NOT stored\_hashed\_password THEN
+    RETURN FALSE
+    ENDIF
+
+    ```
+    IF hash(password) == stored_hashed_password THEN
+      RETURN TRUE
+    ELSE
+      RETURN FALSE
+    ENDIF
+    ```
+
+END FUNCTION
+
+FUNCTION ForgotPassword()
+    DISPLAY "Forgot Password Form"
+    INPUT email
+
+    ```
+    IF email EXISTS IN database THEN
+      GENERATE password_reset_token
+      STORE password_reset_token WITH email
+      SEND password_reset_email WITH password_reset_token
+      DISPLAY "Check your email to reset your password."
+    ELSE
+      DISPLAY "Email not found."
+    ENDIF
+    ```
+
+END FUNCTION
+
+FUNCTION ResetPassword(token, newPassword)
+    IF token is valid THEN
+    UPDATE password IN database
+    DISPLAY "Password reset successful."
+    ELSE
+    DISPLAY "Invalid or expired token."
+    ENDIF
+END FUNCTION
+
+END Login\_SignUp\_Process

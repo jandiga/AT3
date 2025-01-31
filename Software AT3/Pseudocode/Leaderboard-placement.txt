@@ -1,0 +1,57 @@
+BEGIN Leaderboard_System
+
+  CLASS Leaderboard
+    ATTRIBUTES:
+      type  '// "League" or "Global"
+      rankings = []  '// Stores sorted teams/players
+      MVP = NULL  '// Most Valuable Player of the week
+      mostImproved = NULL  '// Player or team with the highest improvement
+      previousWeekPoints = 0  // For tracking improvement
+      lastUpdated = timestamp
+
+    FUNCTION UpdateLeaderboard(teams OR players)
+      SORT teams OR players BY totalPoints DESC
+      rankings = teams OR players
+      CALL IdentifyMVP()
+      CALL IdentifyMostImproved()
+    END FUNCTION
+
+    FUNCTION IdentifyMVP()
+      MVP = rankings[0]  '// Top-ranked player or team
+    END FUNCTION
+
+    FUNCTION IdentifyMostImproved()
+      highestImprovement = 0
+      mostImproved = NULL
+
+      FOR each entity IN rankings
+        improvement = entity.totalPoints - entity.previousWeekPoints
+        IF improvement > highestImprovement THEN
+          highestImprovement = improvement
+          mostImproved = entity
+        ENDIF
+      ENDFOR
+    END FUNCTION
+
+    FUNCTION DisplayLeaderboard()
+      DISPLAY "===== " + type + " Leaderboard ====="
+      FOR each entity IN rankings
+        DISPLAY entity.name + " - " + entity.totalPoints + " points"
+      ENDFOR
+      DISPLAY "MVP of the Week: " + MVP.name
+      DISPLAY "Most Improved: " + mostImproved.name
+    END FUNCTION
+
+  END CLASS
+
+  FUNCTION WeeklyLeaderboardUpdate()
+    FOR each league IN allLeagues
+      CALL league.leaderboard.UpdateLeaderboard(league.teams)
+      CALL league.leaderboard.DisplayLeaderboard()
+    ENDFOR
+
+    CALL globalLeaderboard.UpdateLeaderboard(allTeams OR allPlayers)
+    CALL globalLeaderboard.DisplayLeaderboard()
+  END FUNCTION
+
+END Leaderboard_System

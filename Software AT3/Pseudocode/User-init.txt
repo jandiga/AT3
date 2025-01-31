@@ -1,0 +1,135 @@
+BEGIN User_Profile_Creation
+
+  CLASS UserProfile
+    ATTRIBUTES:
+      userID
+      name
+      email
+      role  # // "Student" or "Teacher"
+      classCode  # // Optional for league association
+      profileCreated = FALSE
+      linkedLeague = NULL
+      linkedTeam = NULL
+      linkedPlayerID = NULL
+
+    FUNCTION CreateProfile(userID, name, email, role, classCode)
+      self.userID = userID
+      self.name = name
+      self.email = email
+      self.role = role
+      self.classCode = classCode
+      self.profileCreated = TRUE
+
+      IF role == "Student" THEN
+        CALL AssignToLeague(classCode)
+      ELSE IF role == "Teacher" THEN
+        CALL AllowLeagueCreation()
+      ENDIF
+
+      DISPLAY "Profile successfully created!"
+    END FUNCTION
+
+    FUNCTION AssignToLeague(classCode)
+      FETCH league FROM database USING classCode
+      IF league EXISTS THEN
+        self.linkedLeague = league
+        DISPLAY "Assigned to league: " + league.name
+      ELSE
+        DISPLAY "No league found. You can join one later."
+      ENDIF
+    END FUNCTION
+
+    FUNCTION AllowLeagueCreation()
+      DISPLAY "You can create and manage leagues."
+    END FUNCTION
+
+    FUNCTION LinkToPlayer(playerID)
+      IF self.role != "Student" THEN
+        RETURN "Only students can link to player profiles"
+      ENDIF
+
+      IF self.linkedPlayerID != NULL THEN
+        RETURN "Already linked to a player profile"
+      ENDIF
+
+      FETCH player FROM Players WHERE playerID = playerID
+      IF NOT player THEN
+        RETURN "Player profile not found"
+      ENDIF
+
+      IF player.linkedUserID != NULL THEN
+        RETURN "This player profile is already linked to another account"
+      ENDIF
+
+      IF player.classCode != self.classCode THEN
+        RETURN "You can only link to players in your class"
+      ENDIF
+
+      self.linkedPlayerID = playerID
+      CALL player.LinkToUser(self.userID)
+      
+      RETURN "Account successfully linked to player profile"
+    END FUNCTION
+
+    FUNCTION UnlinkFromPlayer()
+      IF self.linkedPlayerID == NULL THEN
+        RETURN "No player profile linked"
+      ENDIF
+
+      FETCH player FROM Players WHERE playerID = self.linkedPlayerID
+      IF player THEN
+        CALL player.UnlinkFromUser()
+      ENDIF
+
+      self.linkedPlayerID = NULL
+      RETURN "Successfully unlinked from player profile"
+    END FUNCTION
+
+    FUNCTION GetPlayerStats()
+      IF self.linkedPlayerID == NULL THEN
+        RETURN "No player profile linked"
+      ENDIF
+
+      FETCH player FROM Players WHERE playerID = self.linkedPlayerID
+      RETURN player.GetStats(self.userID)
+    END FUNCTION
+
+  END CLASS
+
+  FUNCTION ConnectProfileToSignUp(userID, name, email, role, classCode)
+    newUserProfile = UserProfile()
+    CALL newUserProfile.CreateProfile(userID, name, email, role, classCode)
+    RETURN newUserProfile
+  END FUNCTION
+
+  FUNCTION ConnectAccountToPlayer(userID, playerID)
+    FETCH userProfile FROM database USING userID
+    CALL self.LinkToPlayer(playerID)
+  END FUNCTION
+
+  FUNCTION LinkToPlayer(playerID)
+      IF self.role != "Student" THEN
+        DISPLAY "Only students can link to player profiles."
+        RETURN
+      ENDIF
+
+      FETCH player FROM database USING playerID
+
+      IF NOT player THEN
+        DISPLAY "Player profile not found."
+        RETURN
+      ENDIF
+
+      IF player.linkedUserID != NULL THEN
+        DISPLAY "This player profile is already linked to another account."
+        RETURN
+      ENDIF
+
+      self.linkedPlayerID = player.playerID
+      player.linkedUserID = self.userID
+      UPDATE database WITH new link
+
+      DISPLAY "Account successfully linked to player profile!"
+    END FUNCTION
+
+END User_Profile_Creation

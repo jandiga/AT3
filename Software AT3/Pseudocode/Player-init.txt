@@ -1,0 +1,174 @@
+BEGIN Player_System
+
+  CLASS Player
+    ATTRIBUTES:
+      playerID
+      name
+      role = "Student"
+      teamIDs
+      totalScore = 0
+      academicScore = 0
+      effortScore = 0
+      performanceBonuses = 0
+      academicHistory = []      # // Tracks academic scores over time
+      weeklyEffortContributions = []  # // Tracks weekly effort points
+      linkedUserID = NULL
+      createdByTeacherID
+      classCode
+      isEligibleForDraft = TRUE
+      dateCreated
+
+    # // Player Creation and Management Methods
+    STATIC FUNCTION CreatePlayer(teacherID, studentName, classCode)
+      IF NOT CheckPermissions(teacherID, "create_player") THEN
+        RETURN "Unauthorized: Only teachers can create player profiles"
+      ENDIF
+
+      newPlayer = Player()
+      newPlayer.playerID = GENERATE_UNIQUE_ID()
+      newPlayer.name = studentName
+      newPlayer.classCode = classCode
+      newPlayer.createdByTeacherID = teacherID
+      newPlayer.dateCreated = CURRENT_TIMESTAMP
+
+      STORE newPlayer IN Players
+      RETURN newPlayer
+    END FUNCTION
+
+    FUNCTION LinkToUser(userID)
+      IF self.linkedUserID != NULL THEN
+        RETURN "This player profile is already linked to another account"
+      ENDIF
+
+      FETCH user FROM Users WHERE userID = userID
+      IF user.classCode != self.classCode THEN
+        RETURN "You can only link to players in your class"
+      ENDIF
+
+      self.linkedUserID = userID
+      UPDATE Users SET linkedPlayerID = self.playerID WHERE userID = userID
+      RETURN "Account successfully linked to player profile"
+    END FUNCTION
+
+    FUNCTION UnlinkFromUser()
+      previousUserID = self.linkedUserID
+      self.linkedUserID = NULL
+      UPDATE Users SET linkedPlayerID = NULL WHERE userID = previousUserID
+      RETURN "Account unlinked from player profile"
+    END FUNCTION
+
+    FUNCTION GetStats(requestingUserID)
+      basicStats = {
+        name: self.name,
+        totalScore: self.totalScore
+      }
+
+      FETCH user FROM Users WHERE userID = requestingUserID
+      
+      IF self.linkedUserID == requestingUserID OR 
+         user.role == "Teacher" OR 
+         user.permissions CONTAINS "view_detailed_stats" THEN
+        RETURN {
+          ...basicStats,
+          academicHistory: self.academicHistory,
+          effortHistory: self.weeklyEffortContributions,
+          academicScore: self.academicScore,
+          effortScore: self.effortScore,
+          performanceBonuses: self.performanceBonuses
+        }
+      ENDIF
+
+      RETURN basicStats
+    END FUNCTION
+
+    # // Grade and Performance Methods
+    FUNCTION ConvertGradeToScore(gradeInput)
+      IF gradeInput is STRING:
+        gradeInput = UPPERCASE(gradeInput)
+        SWITCH gradeInput:
+          CASE "A+": RETURN 100
+          CASE "A":  RETURN 95
+          CASE "A-": RETURN 90
+          CASE "B+": RETURN 87
+          CASE "B":  RETURN 84
+          CASE "B-": RETURN 80
+          CASE "C+": RETURN 77
+          CASE "C":  RETURN 74
+          CASE "C-": RETURN 70
+          CASE "D+": RETURN 67
+          CASE "D":  RETURN 64
+          CASE "D-": RETURN 60
+          CASE "F":  RETURN 50
+          DEFAULT:
+            IF "/" IN gradeInput:
+              PARTS = SPLIT(gradeInput, "/")
+              IF PARTS[1] == 0: RETURN 0  # // Prevent division by zero
+              RETURN (PARTS[0] / PARTS[1]) * 100
+            ELSE IF "%" IN gradeInput:
+              RETURN NUMERIC_VALUE(REPLACE("%", "", gradeInput))
+            ELSE:
+              RETURN 0  # // Invalid input
+      ELSE IF gradeInput is NUMBER:
+        RETURN gradeInput  # // Assume input is already percentage
+      ELSE:
+        RETURN 0  # // Invalid type
+    END FUNCTION
+
+    FUNCTION UpdateAcademicPerformance(gradeInput)
+      currentScore = ConvertGradeToScore(gradeInput)
+      
+      # // Track history and calculate improvement
+      IF academicHistory NOT EMPTY:
+        previousScore = academicHistory[-1]
+        IF previousScore != 0:
+          improvement = ((currentScore - previousScore) / previousScore) * 100
+          IF improvement >= 2:
+            academicScore += (improvement / 2)  # // 1 point per 2% improvement
+      
+      # // A+ bonus based on original input
+      IF gradeInput == "A+":
+        academicScore += 10
+      
+      academicHistory.append(currentScore)
+    END FUNCTION
+
+    FUNCTION UpdateEffortMetrics(homeworkCompleted, classParticipation)
+      weeklyPoints = (homeworkCompleted * 5) + (classParticipation * 5)
+      effortScore += weeklyPoints
+      weeklyEffortContributions.append(weeklyPoints)
+    END FUNCTION
+
+    FUNCTION GetRecentImprovement()
+      IF academicHistory LENGTH < 2:
+        RETURN 0
+      ELSE:
+        previous = academicHistory[-2]
+        current = academicHistory[-1]
+        RETURN ((current - previous) / previous) * 100
+    END FUNCTION
+
+    FUNCTION GetLastWeekContribution()
+      IF weeklyEffortContributions EMPTY:
+        RETURN 0
+      ELSE:
+        RETURN weeklyEffortContributions[-1]
+    END FUNCTION
+
+    FUNCTION ApplyPerformanceBonuses(isMostImproved, isTopPerformer)
+      IF isMostImproved:
+        performanceBonuses += 20
+      IF isTopPerformer:
+        performanceBonuses += 15
+    END FUNCTION
+
+    FUNCTION CalculateTotalScore()
+      totalScore = academicScore + effortScore + performanceBonuses
+      RETURN totalScore
+    END FUNCTION
+
+    FUNCTION ContributeToTeamScore(team)
+      team.cumulativeScore += totalScore
+    END FUNCTION
+  END CLASS
+
+END Player_System
