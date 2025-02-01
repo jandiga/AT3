@@ -1,0 +1,19 @@
+{
+  "dependencies": {
+    "express": "^4.21.2",
+    "path": "^0.12.7",
+    "url": "^0.11.4"
+  },
+  "name": "software-at3",
+  "version": "1.0.0",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": ""
+}
