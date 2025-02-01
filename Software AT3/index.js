@@ -8,64 +8,64 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const port = 3000;
 
-// Serve static files from the Pages directory
+// Serve static files from the public directory
 app.use(express.static(path.join(__dirname)));
 
 // Routes
 app.get('/', (req, res) => { 
-    res.sendFile(path.join(__dirname, 'Pages', 'homepage.html'));
+    res.sendFile(path.join(__dirname, 'public', 'homepage.html'));
 });
 
 app.get('/dashboard', (req, res) => {
-    res.sendFile(path.join(__dirname, 'Pages', 'dashboard.html'));
+    res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
 });
 
 app.get('/leagues', (req, res) => {
-    res.sendFile(path.join(__dirname, 'Pages', 'leagues.html'));
+    res.sendFile(path.join(__dirname, 'public', 'leagues.html'));
 });
 
 app.get('/leaderboard', (req, res) => {
-    res.sendFile(path.join(__dirname, 'Pages', 'leaderboard.html'));
+    res.sendFile(path.join(__dirname, 'public', 'leaderboard.html'));
 });
 
 app.get('/faq', (req, res) => {
-    res.sendFile(path.join(__dirname, 'Pages', 'FAQ.html'));
+    res.sendFile(path.join(__dirname, 'public', 'FAQ.html'));
 });
 
 app.get('/about', (req, res) => {
-    res.sendFile(path.join(__dirname, 'Pages', 'about.html'));
+    res.sendFile(path.join(__dirname, 'public', 'about.html'));
 });
 
 app.get('/login', (req, res) => {
-    res.sendFile(path.join(__dirname, 'Pages', 'login.html'));
+    res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
 
 app.get('/sign-up', (req, res) => {
-    res.sendFile(path.join(__dirname, 'Pages', 'sign-up.html'));
+    res.sendFile(path.join(__dirname, 'public', 'sign-up.html'));
 });
 
 app.get('/team-management', (req, res) => {
-    res.sendFile(path.join(__dirname, 'Pages', 'team-management.html'));
+    res.sendFile(path.join(__dirname, 'public', 'team-management.html'));
 });
 
 app.get('/settings', (req, res) => {
-    res.sendFile(path.join(__dirname, 'Pages', 'settings.html'));
+    res.sendFile(path.join(__dirname, 'public', 'settings.html'));
 });
 
 app.get('/player-details', (req, res) => {
-    res.sendFile(path.join(__dirname, 'Pages', 'player-details.html'));
+    res.sendFile(path.join(__dirname, 'public', 'player-details.html'));
 });
 
 app.get('/rewards', (req, res) => {
-    res.sendFile(path.join(__dirname, 'Pages', 'rewards.html'));
+    res.sendFile(path.join(__dirname, 'public', 'rewards.html'));
 });
 
 app.get('/scoring-and-progress', (req, res) => {
-    res.sendFile(path.join(__dirname, 'Pages', 'scoring-and-progress.html'));
+    res.sendFile(path.join(__dirname, 'public', 'scoring-and-progress.html'));
 });
 
 app.get('/drafting', (req, res) => {
-    res.sendFile(path.join(__dirname, 'Pages', 'drafting.html'));
+    res.sendFile(path.join(__dirname, 'public', 'drafting.html'));
 });
 
 app.listen(port, () => { 
