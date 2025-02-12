@@ -1,0 +1,22 @@
+Middleware
+    bodyParser to get information etc
+    Morgan for logging information of requests
+
+
+Other
+    Can make most of backend website as soon as I learn to connect different JS files together
+    because it will work the same as in the at1 api coding project
+    Page to view all players
+        Premier league fantasy app viewing team screen
+        Different seats for different subjects
+        Seats/classroom instead of feild
+
+The program essentially works as a gamified educational motivatior system where:
+1. Teachers create player profiles that can be added to league teams
+2. Students can join as users and have the option to link to their player profiles
+3. Users will create and join leagues, competing against other users
+4. Teams are formed through a draft system
+5. Academic performance, improvement and effort are converted into points that contribute towards their team
+6. Regular updates maintain competition standings within a league
+7. Leaderboards and rewards encourage participation and improvement by students in their school career
+The system combines educational tracking with competitive gaming elements to create an engaging academic environment.

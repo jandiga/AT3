@@ -1,6 +1,7 @@
 import path from 'path';
 import express from 'express';
 import { fileURLToPath } from 'url';
+import bodyParser from 'body-parser';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -10,10 +11,14 @@ const port = 3000;
 
 // Serve static files from the public directory
 app.use(express.static(path.join(__dirname)));
+// app.use(express.static("public"));
+app.use(bodyParser.urlencoded({ extended: true })); 
+app.use(express.urlencoded({ extended: true }));
+
 
 // Routes
 app.get('/', (req, res) => { 
-    res.sendFile(path.join(__dirname, 'public', 'homepage.html'));
+    res.render('index.ejs');
 });
 
 app.get('/dashboard', (req, res) => {
@@ -37,7 +42,16 @@ app.get('/about', (req, res) => {
 });
 
 app.get('/login', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'login.html'));
+    res.render('login.ejs');
+});
+
+app.post('/login', (req, res) => {
+    // Handle login logic here
+    console.log(req.body['email']);
+    console.log(req.body['password']);
+    console.log(req.body['remember']);
+
+    res.redirect('/dashboard');
 });
 
 app.get('/sign-up', (req, res) => {

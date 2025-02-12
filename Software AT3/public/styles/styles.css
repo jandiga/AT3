@@ -1,0 +1,8 @@
+.align{
+    display: flex;
+    flex: 1 1 0;
+    Flex-basis: 50%;
+    max-width: 50%;
+    justify-content: center;
+
+}
