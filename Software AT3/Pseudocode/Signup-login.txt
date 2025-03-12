@@ -1,126 +1,52 @@
-BEGIN Login\_SignUp\_Process
+BEGIN Login_SignUp_Process
 
 FUNCTION SignUp()
-    DISPLAY "Sign Up Form"
-    INPUT name
-    INPUT email
-    CALL ValidateEmail(email)
-    INPUT password
-    CALL CheckPasswordStrength(password)
-    INPUT role (Student or Teacher)
-    INPUT classCode (optional)
-
-    ```
-    IF role == "Student" THEN
-        ASSIGN defaultPermissions TO [player_scoring, team_management, league_participation]
-    ELSE IF role == "Teacher" THEN
-      ASSIGN defaultPermissions TO [create_league, manage_league, oversee_teams, monitor_metrics]
-    ENDIF
-
-    STORE (name, email, hash(password), role, classCode, defaultPermissions)
-
-    CALL SendEmailConfirmation(email)
-    DISPLAY "Check your email to confirm your account."
-
-    IF SendEmailConfirmation == TRUE THEN
-      IF role == "Student":
-        CREATE User_Profile_Creation()
-    ```
+    # Display form and collect user details (name, email, password, role, classCode).
+    # Validate email format and password strength.
+    # Assign default permissions based on role.
+    # Store user details securely and send an email confirmation.
+    # If confirmation is successful and role is "Student," initiate user profile creation.
 END FUNCTION
 
 FUNCTION hash(password)
-  USE bcrypt WITH salt=12
+    # Use bcrypt with salt=12 for password hashing.
 END FUNCTION
 
 CLASS Session
-  ATTRIBUTES:
-    sessionToken
-    expiry
-    IPValidation
+    ATTRIBUTES:
+        sessionToken, expiry, IPValidation
 END CLASS
 
 FUNCTION ValidateEmail(email)
-    IF email NOT in proper format THEN
-    DISPLAY "Invalid email format"
-    RETURN FALSE
-    ENDIF
-    RETURN TRUE
+    # Check if the email is in a valid format; return TRUE or FALSE.
 END FUNCTION
 
 FUNCTION CheckPasswordStrength(password)
-    IF password.length < 8 OR NOT containsSpecialCharacter(password) THEN
-    DISPLAY "Weak password. Use at least 8 characters and include at least 1 special character."
-    RETURN FALSE
-    ENDIF
-    RETURN TRUE
+    # Ensure password meets length and complexity requirements; return TRUE or FALSE.
 END FUNCTION
 
 FUNCTION SendEmailConfirmation(email)
-    GENERATE unique\_token
-    STORE unique\_token WITH email
-    SEND email WITH confirmation link (containing unique\_token)
+    # Generate a unique token, store it, and send a confirmation email.
 END FUNCTION
 
 FUNCTION Login()
-    DISPLAY "Login Form"
-    INPUT email
-    INPUT password
-    INPUT rememberMe (optional)
-
-    ```
-    IF ValidateCredentials(email, password) THEN
-      IF CAPTCHA_Passed() THEN
-        REDIRECT user TO dashboard
-      ELSE
-        DISPLAY "Failed CAPTCHA. Please try again."
-      ENDIF
-    ELSE
-      DISPLAY "Invalid email or password."
-    ENDIF
-    ```
-
+    # Display login form and collect user credentials.
+    # Validate credentials and check CAPTCHA before granting access.
 END FUNCTION
 
 FUNCTION ValidateCredentials(email, password)
-    FETCH stored\_hashed\_password FROM database USING email
-    IF NOT stored\_hashed\_password THEN
-    RETURN FALSE
-    ENDIF
-
-    ```
-    IF hash(password) == stored_hashed_password THEN
-      RETURN TRUE
-    ELSE
-      RETURN FALSE
-    ENDIF
-    ```
-
+    # Fetch stored hashed password from the database.
+    # Compare input password (hashed) with stored password.
+    # Return TRUE if valid, otherwise FALSE.
 END FUNCTION
 
 FUNCTION ForgotPassword()
-    DISPLAY "Forgot Password Form"
-    INPUT email
-
-    ```
-    IF email EXISTS IN database THEN
-      GENERATE password_reset_token
-      STORE password_reset_token WITH email
-      SEND password_reset_email WITH password_reset_token
-      DISPLAY "Check your email to reset your password."
-    ELSE
-      DISPLAY "Email not found."
-    ENDIF
-    ```
-
+    # Display password reset form and collect email.
+    # If email exists, generate a reset token, store it, and send a reset email.
 END FUNCTION
 
 FUNCTION ResetPassword(token, newPassword)
-    IF token is valid THEN
-    UPDATE password IN database
-    DISPLAY "Password reset successful."
-    ELSE
-    DISPLAY "Invalid or expired token."
-    ENDIF
+    # Verify token validity, update password in the database, and confirm success.
 END FUNCTION
 
-END Login\_SignUp\_Process
+END Login_SignUp_Process

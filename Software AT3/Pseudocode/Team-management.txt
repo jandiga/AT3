@@ -1,36 +1,28 @@
 BEGIN League_Scoring
+
   CLASS Team
     ATTRIBUTES:
-      teamID
-      teamName
-      players = []  // List of Player objects
-      weeklyPerformance = 0
-      totalPoints = 0
+      teamID, teamName, players = []
+      weeklyPerformance = 0, totalPoints = 0
       cumulativeScore = 0
-      managerUserID  // Teacher/Student who manages
+      managerUserID  # Teacher/Student who manages the team
       leagueID = NULL
 
     FUNCTION AddPlayer(player)
-      IF player.eligibleForDraft:
-        players.append(player)
-        cumulativeScore += player.totalScore
+      # Adds an eligible player to the team and updates the cumulative score.
     END FUNCTION
 
     FUNCTION RemovePlayer(player)
-      players.remove(player)
-      cumulativeScore -= player.totalScore
+      # Removes a player from the team and adjusts the cumulative score.
     END FUNCTION
 
     FUNCTION CalculateWeeklyScore()
-      weeklyScore = 0
-      FOR player IN players:
-        weeklyScore += player.CalculateTotalScore()
-      weeklyPerformance.append(weeklyScore)
-      player.ContributeToTeamScore(self)  // Link to Player-init.txt
-      RETURN weeklyScore
+      # Computes the team's total score for the week based on player contributions.
     END FUNCTION
 
     FUNCTION UpdateTotalPoints()
-      totalPoints += weeklyPoints
+      # Updates the team's overall points based on weekly performance.
     END FUNCTION
   END CLASS
+
+END League_Scoring
