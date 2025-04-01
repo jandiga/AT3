@@ -1,0 +1,56 @@
+<%- include('header.ejs') %>
+
+<!-- Content for profile -->
+<div class="container">
+  <h1>Profile</h1>
+  <h2>Welcome, <%= user.name %></h2>
+  <!-- Profile content -->
+  <% if (user.role === 'Student') { %>
+    <div class="row mt-4">
+        <div class="col-md-12">
+            <h3>Your Team</h3>
+            <% if (typeof players !== 'undefined' && players && players.length > 0) { %>
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Total Score</th>
+                                <th>Academic Score</th>
+                                <th>Effort Score</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <% players.forEach(player => { %>
+                                <tr>
+                                    <td><%= player.name %></td>
+                                    <td><%= player.totalScore %></td>
+                                    <td><%= player.academicScore %></td>
+                                    <td><%= player.effortScore %></td>
+                                    <td>
+                                        <button class="btn btn-sm btn-primary">Update</button>
+                                    </td>
+                                </tr>
+                            <% }) %>
+                        </tbody>
+                    </table>
+                </div>
+            <% } else { %>
+                <p>No players found. Start by adding players to your team.</p>
+            <% } %>
+        </div>
+    </div>
+  <% } else if (user.role === 'Teacher') { %>
+    <div class="row mt-4">
+        <div class="col-md-12">
+            <h3>Your Profile Information</h3>
+            <p>Role: <%= user.role %></p>
+            <p>Email: <%= user.email %></p>
+            <!-- Add more teacher-specific profile information here -->
+        </div>
+    </div>
+  <% } %>
+</div>
+
+<%- include('footer.ejs') %>
