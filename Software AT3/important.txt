@@ -1,7 +1,53 @@
+TODO
+    Home
+        Leagues
+        Leaderboards
+        FAQ
+        About
+    Admin
+        updates player scores
+    User
+        team
+        Drafting
+        league
+        Fix profile-seperate from admin students & make sure cannot acces other player profiles
+    Player
+        stats breakdown
+        player stats page
+
+
+
+Advanced Features:
+1. Interactivity:  Utilise JavaScript to make your website interactive with the custom generation of pages/routes for users to interact with dynamically.
+    Example: Dynamically created profiles for users and players displaying stats for each.
+2. Predictive analysis: Offer insights or forecasts using AI.
+    Example: Predicting a player's performance based on their past stats and other factors.
+3. Leaderboards:
+    Example: Leaderboard for players and teams within a league that updates dynamically based on player scores.
+4. Customisation: Allow users to customise their experience.
+
+
 Middleware
     bodyParser to get information etc
     Morgan for logging information of requests
 
+Data use transparency
+
+Data stored as encrypted
+
+Security tutorial
+
+Customisable Security
+
+Minify (Troll)?
+
+POLP
+
+User consent
+
+Different language compatability
+
+Salting??
 
 Other
     Can make most of backend website as soon as I learn to connect different JS files together

@@ -9,28 +9,16 @@ const playerSchema = new mongoose.Schema({
         type: String,
         default: 'Student'
     },
-    teamID: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Team'
-    },
-    totalScore: {
-        type: Number,
-        default: 0
-    },
-    academicScore: {
-        type: Number,
-        default: 0
-    },
-    effortScore: {
-        type: Number,
-        default: 0
-    },
     academicHistory: [{
-        score: Number,
+        grade_percent: Number,
         date: Date
     }],
-    weeklyEffortContributions: [{
-        points: Number,
+    studyContributions: [{
+        studied: Boolean,
+        date: Date
+    }],
+    weeklyStudyContributions: [{
+        hours: Number,
         week: Number
     }],
     createdByTeacherID: {
@@ -41,10 +29,6 @@ const playerSchema = new mongoose.Schema({
     classCode: {
         type: String,
         required: true
-    },
-    isEligibleForDraft: {
-        type: Boolean,
-        default: true
     },
     linkedUserID: {
         type: mongoose.Schema.Types.ObjectId,

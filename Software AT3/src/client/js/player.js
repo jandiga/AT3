@@ -3,17 +3,12 @@ class Player {
         this.playerID = null;
         this.name = '';
         this.role = 'Student';
-        this.teamIDs = [];
-        this.totalScore = 0;
-        this.academicScore = 0;
-        this.effortScore = 0;
-        this.performanceBonuses = 0;
-        this.academicHistory = [];
-        this.weeklyEffortContributions = [];
+        this.lifetimeTotalScore = 0;
+        this.improvementScore = 0;
+        this.grades = [];
         this.linkedUserID = null;
         this.createdByTeacherID = null;
         this.classCode = null;
-        this.isEligibleForDraft = true;
         this.dateCreated = new Date();
     }
 
@@ -68,7 +63,28 @@ class Player {
         }
         return gradeInput;
     }
+    score(grades) {
+        // Calculate the score of a player relative to the newest grade
+        if (grades.length < 2) {
+            return 0;
+        }
+        let improvementScore = this.improvementOverTime(grades, 1);
+        let consistencyBonus = 0;
 
+        // Calculate consistency bonus
+        if (grades.length >= 3) {
+            last_three = grades.slice(-3);
+            if (last_three.every(g => g >= 85)) {
+                consistencyBonus = 5;
+            } else if (last_three.every(g => g >= 70)) {
+                consistencyBonus = 3;
+            }
+        }
+
+    }
+    improvementOverTime(grades, weeks) {
+        return grades(grades.length)/grades(grades.length - weeks);
+    }
 }
 
 export default Player;

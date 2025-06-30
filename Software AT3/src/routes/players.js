@@ -22,8 +22,9 @@ router.post('/api/players/create', isAuthenticated, isTeacher, async (req, res) 
                 score: Number(0),
                 date: new Date()
             }],
-            weeklyEffortContributions: [{
+            weeklyStudyContributions: [{
                 points: Number(0),
+                // what week it is
                 week: Math.floor(Date.now() / (7 * 24 * 60 * 60 * 1000))
             }]
         });

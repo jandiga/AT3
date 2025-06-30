@@ -33,14 +33,19 @@ const userSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Player'
     },
-    linkedLeague: {
+    linkedLeagues: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'League'
-    },
-    linkedTeam: {
+    }],
+    pastLeagues: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'League'
+        // add placement
+    }],
+    linkedTeams: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Team'
-    },
+    }],
     dateCreated: {
         type: Date,
         default: Date.now
