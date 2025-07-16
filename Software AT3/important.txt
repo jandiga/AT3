@@ -2,15 +2,16 @@ TODO
     Home
         Leagues
         Leaderboards
-        FAQ
-        About
+        FAQ (DONE)
+        About (DONE)
+        already used email address fix (DONE)
     Admin
-        updates player scores
+        updates player scores (DONE)
     User
         team
         Drafting
-        league
-        Fix profile-seperate from admin students & make sure cannot acces other player profiles
+        league (DONE)
+        Fix profile-seperate from admin students & make sure cannot acces other player profiles (DONE)
     Player
         stats breakdown
         player stats page

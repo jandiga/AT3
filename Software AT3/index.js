@@ -8,6 +8,8 @@ import connectDB from './src/config/database.js';
 import authRoutes from './src/routes/auth.js';
 import dashboardRoutes from './src/routes/dashboard.js';
 import playerRoutes from './src/routes/players.js';
+import leagueRoutes from './src/routes/leagues.js';
+import draftRoutes from './src/routes/draft.js';
 import { isAuthenticated, isTeacher } from './src/middleware/auth.js';
 
 // Configuration
@@ -51,6 +53,8 @@ app.use((req, res, next) => {
 app.use('/', authRoutes);
 app.use('/dashboard', dashboardRoutes);
 app.use(playerRoutes);
+app.use(leagueRoutes);
+app.use(draftRoutes);
 
 // Home route
 app.get('/', (req, res) => {
@@ -73,7 +77,34 @@ app.get('/sign-up', (req, res) => {
 });
 
 app.get('/leagues', (req, res) => {
-    res.render('leagues');
+    res.render('leagues', { user: req.session.user });
+});
+
+// League detail view
+app.get('/leagues/:leagueId', isAuthenticated, async (req, res) => {
+    try {
+        const { leagueId } = req.params;
+        // This would render a detailed league view
+        res.render('league-detail', {
+            user: req.session.user,
+            leagueId: leagueId
+        });
+    } catch (error) {
+        res.status(500).render('error', { message: error.message });
+    }
+});
+
+// Draft view
+app.get('/draft/:leagueId', isAuthenticated, async (req, res) => {
+    try {
+        const { leagueId } = req.params;
+        res.render('drafting', {
+            user: req.session.user,
+            leagueId: leagueId
+        });
+    } catch (error) {
+        res.status(500).render('error', { message: error.message });
+    }
 });
 
 app.get('/leaderboard', (req, res) => {
@@ -93,18 +124,29 @@ app.get('/profile', async (req, res) => {
         if (!req.session.user) {
             return res.redirect('/login');
         }
-        
+
         let data = {
             user: req.session.user
         };
 
         if (req.session.user.role === 'Student') {
-            // For students, fetch their team players
-            const Player = (await import('./src/models/Player.js')).default;
-            const players = await Player.find({ 
-                teamID: req.session.user.linkedTeam 
-            });
-            data.players = players;
+            // For students, fetch their teams and the players on those teams
+            const Team = (await import('./src/models/Team.js')).default;
+            const User = (await import('./src/models/User.js')).default;
+
+            // Get the full user data with linked teams
+            const fullUser = await User.findById(req.session.user.id)
+                .populate('linkedTeams');
+
+            if (fullUser && fullUser.linkedTeams && fullUser.linkedTeams.length > 0) {
+                // Get teams with populated rosters
+                const teams = await Team.find({
+                    _id: { $in: fullUser.linkedTeams },
+                    ownerID: req.session.user.id
+                }).populate('roster.playerID', 'name academicHistory weeklyStudyContributions');
+
+                data.teams = teams;
+            }
         }
 
         res.render('profile', data);

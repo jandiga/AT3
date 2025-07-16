@@ -6,6 +6,11 @@
       <div class="card">
         <div class="card-header">Sign Up</div>
         <div class="card-body">
+          <% if (typeof error !== 'undefined') { %>
+            <div class="alert alert-danger" role="alert">
+              <%= error %>
+            </div>
+          <% } %>
           <form action="/register" method="POST">
             <div class="mb-3">
               <label for="name" class="form-label">Full Name</label>
@@ -19,23 +24,24 @@
               <label for="password" class="form-label">Password</label>
               <input type="password" class="form-control" id="password" name="password" required>
             </div>
+            <!-- Button check for role -->
             <div class="mb-3">
               <label for="role" class="form-label">Role</label>
               <select class="form-select" id="role" name="role" required>
-                <option value="Student">Student</option>
+                <option value="Student">User</option>
                 <option value="Teacher">Teacher</option>
               </select>
             </div>
+            <!-- If student or teacher, show class code field -->
             <div class="mb-3">
-              <label for="playerID" class="form-label">Player ID (for Students)</label>
+              <label for="playerID" class="form-label">Player ID (for Students Only!)</label>
               <input type="text" class="form-control" id="playerID" name="playerID">
               <small class="form-text text-muted">If you're a student, enter the Player ID provided by your teacher to link your accounts</small>
             </div>
-            <!-- Add a class code field for students too -->
             <div class="mb-3" id="classCodeField" style="display: none;">
               <label for="classCode" class="form-label">Class Code</label>
               <input type="text" class="form-control" id="classCode" name="classCode">
-              <small class="form-text text-muted">Enter the class code provided by your teacher</small>
+              <small class="form-text text-muted">Enter the class code provided by your school</small>
             </div>
             <button type="submit" class="btn btn-primary">Sign Up</button>
           </form>
@@ -50,7 +56,7 @@
 
 <%- include('footer.ejs') %>
 
-<!-- Add JavaScript to show/hide fields based on role -->
+<!-- JavaScript to show/hide fields based on role -->
 <script>
   document.getElementById('role').addEventListener('change', function() {
     const isTeacher = this.value === 'Teacher';

@@ -1,0 +1,200 @@
+<%- include('header.ejs') %>
+
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h1 id="leagueName">Loading...</h1>
+                    <p class="text-muted" id="leagueDescription">Loading league details...</p>
+                </div>
+                <div>
+                    <a href="/leagues" class="btn btn-outline-secondary">
+                        <i class="bi bi-arrow-left"></i> Back to Leagues
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- League Info Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h5 class="card-title">Status</h5>
+                    <span id="leagueStatus" class="badge bg-secondary">Loading...</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h5 class="card-title">Participants</h5>
+                    <p class="card-text" id="participantCount">-/-</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h5 class="card-title">Players per Team</h5>
+                    <p class="card-text" id="playersPerTeam">-</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h5 class="card-title">Draft Type</h5>
+                    <p class="card-text" id="draftType">-</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div id="leagueActions" class="d-flex gap-2">
+                <!-- Actions will be populated by JavaScript -->
+            </div>
+        </div>
+    </div>
+
+    <!-- League Content Tabs -->
+    <ul class="nav nav-tabs" id="leagueDetailTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="teams-tab" data-bs-toggle="tab" data-bs-target="#teams" type="button" role="tab">
+                Teams & Rosters
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="players-tab" data-bs-toggle="tab" data-bs-target="#players" type="button" role="tab">
+                Available Players
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="standings-tab" data-bs-toggle="tab" data-bs-target="#standings" type="button" role="tab">
+                Standings
+            </button>
+        </li>
+        <li class="nav-item" role="presentation" id="manage-tab-li" style="display: none;">
+            <button class="nav-link" id="manage-tab" data-bs-toggle="tab" data-bs-target="#manage" type="button" role="tab">
+                Manage
+            </button>
+        </li>
+    </ul>
+
+    <!-- Tab Content -->
+    <div class="tab-content" id="leagueDetailTabContent">
+        <!-- Teams Tab -->
+        <div class="tab-pane fade show active" id="teams" role="tabpanel">
+            <div class="row mt-4">
+                <div class="col-md-12">
+                    <div id="teamsContent">
+                        <div class="text-center">
+                            <div class="spinner-border" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Players Tab -->
+        <div class="tab-pane fade" id="players" role="tabpanel">
+            <div class="row mt-4">
+                <div class="col-md-12">
+                    <div id="playersContent">
+                        <div class="text-center">
+                            <div class="spinner-border" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Standings Tab -->
+        <div class="tab-pane fade" id="standings" role="tabpanel">
+            <div class="row mt-4">
+                <div class="col-md-12">
+                    <div id="standingsContent">
+                        <div class="text-center">
+                            <div class="spinner-border" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Manage Tab (Teachers only) -->
+        <div class="tab-pane fade" id="manage" role="tabpanel">
+            <div class="row mt-4">
+                <div class="col-md-12">
+                    <h4>League Management</h4>
+                    <div id="manageContent">
+                        <div class="text-center">
+                            <div class="spinner-border" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Player Update Modal (Teachers only) -->
+<div class="modal fade" id="updatePlayerModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Update Player</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="updatePlayerForm">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Player Name</label>
+                        <input type="text" class="form-control" id="playerNameDisplay" readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label for="academicScore" class="form-label">Academic Score (0-100)</label>
+                        <input type="number" class="form-control" id="academicScore" name="academicScore" min="0" max="100" step="0.1">
+                        <div class="form-text">Leave empty to not update</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="effortHours" class="form-label">Effort Hours This Week</label>
+                        <input type="number" class="form-control" id="effortHours" name="effortHours" min="0" step="0.5">
+                        <div class="form-text">Leave empty to not update</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="notes" class="form-label">Notes</label>
+                        <textarea class="form-control" id="notes" name="notes" rows="3"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Update Player</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+// Pass data from server
+const leagueId = '<%= leagueId %>';
+const currentUser = <%- JSON.stringify(user) %>;
+window.currentUserId = '<%= user.id %>';
+</script>
+<script src="/js/league-detail.js"></script>
+
+<%- include('footer.ejs') %>

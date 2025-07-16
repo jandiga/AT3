@@ -1,0 +1,186 @@
+<%- include('header.ejs') %>
+
+<div class="container-fluid mt-4">
+    <div class="row">
+        <!-- Draft Status Panel -->
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Draft Status</h5>
+                </div>
+                <div class="card-body">
+                    <div id="draftStatus">
+                        <div class="text-center">
+                            <div class="spinner-border" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Draft Order -->
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h6 class="mb-0">Draft Order</h6>
+                </div>
+                <div class="card-body p-2">
+                    <div id="draftOrder">
+                        <div class="text-center">
+                            <small class="text-muted">Loading...</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Current Turn Timer -->
+            <div class="card mt-3" id="timerCard" style="display: none;">
+                <div class="card-body text-center">
+                    <h6>Time Remaining</h6>
+                    <div id="turnTimer" class="h4 text-warning">--:--</div>
+                    <button class="btn btn-sm btn-outline-secondary" id="autoPickBtn" style="display: none;">
+                        Auto Pick
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Draft Area -->
+        <div class="col-md-6">
+            <!-- Current Pick Info -->
+            <div class="card mb-3">
+                <div class="card-body">
+                    <div id="currentPickInfo">
+                        <div class="text-center">
+                            <div class="spinner-border" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Available Players -->
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Available Players</h5>
+                    <div class="d-flex gap-2">
+                        <input type="text" class="form-control form-control-sm" id="playerSearch" placeholder="Search players..." style="width: 200px;">
+                        <select class="form-select form-select-sm" id="sortPlayers" style="width: auto;">
+                            <option value="name">Sort by Name</option>
+                            <option value="academic">Sort by Academic Score</option>
+                            <option value="effort">Sort by Effort Score</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <div id="availablePlayers" style="max-height: 500px; overflow-y: auto;">
+                        <div class="text-center p-4">
+                            <div class="spinner-border" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Teams and Rosters -->
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0">Teams & Rosters</h6>
+                </div>
+                <div class="card-body p-0">
+                    <div id="teamsRosters" style="max-height: 600px; overflow-y: auto;">
+                        <div class="text-center p-4">
+                            <div class="spinner-border" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Picks -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0">Recent Picks</h6>
+                </div>
+                <div class="card-body">
+                    <div id="recentPicks">
+                        <div class="text-center">
+                            <small class="text-muted">No picks yet</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Player Details Modal -->
+<div class="modal fade" id="playerDetailsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Player Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="playerDetailsContent">
+                    <div class="text-center">
+                        <div class="spinner-border" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="draftPlayerBtn" style="display: none;">
+                    Draft This Player
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.player-card {
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.player-card:hover {
+    background-color: #f8f9fa;
+    transform: translateY(-1px);
+}
+
+.player-card.draftable {
+    border-left: 4px solid #28a745;
+}
+
+.current-turn {
+    background-color: #fff3cd;
+    border-left: 4px solid #ffc107;
+}
+
+.my-turn {
+    background-color: #d1ecf1;
+    border-left: 4px solid #17a2b8;
+}
+</style>
+
+<script>
+// Pass league ID from server
+const leagueId = '<%= typeof leagueId !== "undefined" ? leagueId : "" %>';
+const currentUserId = '<%= typeof user !== "undefined" && user ? user.id : "" %>';
+</script>
+<script src="/js/draft.js"></script>
+
+<%- include('footer.ejs') %>

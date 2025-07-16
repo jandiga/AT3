@@ -1,9 +1,219 @@
 <%- include('header.ejs') %>
 
-<!-- Content from leagues.html goes here -->
-<div class="container">
-  <h1>Leagues</h1>
-  <!-- League content -->
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Leagues</h1>
+        <% if (typeof user !== 'undefined' && user && user.role === 'Teacher') { %>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createLeagueModal">
+                <i class="bi bi-plus-circle"></i> Create League
+            </button>
+        <% } %>
+    </div>
+
+    <!-- League Tabs -->
+    <ul class="nav nav-tabs" id="leagueTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="browse-tab" data-bs-toggle="tab" data-bs-target="#browse" type="button" role="tab">
+                Browse Leagues
+            </button>
+        </li>
+        <% if (typeof user !== 'undefined' && user) { %>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="my-leagues-tab" data-bs-toggle="tab" data-bs-target="#my-leagues" type="button" role="tab">
+                    My Leagues
+                </button>
+            </li>
+            <% if (user.role === 'Teacher') { %>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="manage-tab" data-bs-toggle="tab" data-bs-target="#manage" type="button" role="tab">
+                        Manage Leagues
+                    </button>
+                </li>
+            <% } %>
+        <% } %>
+    </ul>
+
+    <!-- Tab Content -->
+    <div class="tab-content" id="leagueTabContent">
+        <!-- Browse Leagues Tab -->
+        <div class="tab-pane fade show active" id="browse" role="tabpanel">
+            <div class="row mt-4">
+                <div class="col-md-12">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h4>Available Leagues</h4>
+                        <div class="d-flex gap-2">
+                            <select class="form-select" id="statusFilter" style="width: auto;">
+                                <option value="">All Status</option>
+                                <option value="open">Open for Joining</option>
+                                <option value="drafting">Currently Drafting</option>
+                                <option value="active">Active</option>
+                            </select>
+                            <button class="btn btn-outline-secondary" onclick="loadLeagues()">
+                                <i class="bi bi-arrow-clockwise"></i> Refresh
+                            </button>
+                        </div>
+                    </div>
+                    <div id="leaguesList">
+                        <div class="text-center">
+                            <div class="spinner-border" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- My Leagues Tab -->
+        <% if (typeof user !== 'undefined' && user) { %>
+            <div class="tab-pane fade" id="my-leagues" role="tabpanel">
+                <div class="row mt-4">
+                    <div class="col-md-12">
+                        <h4>My Leagues</h4>
+                        <div id="myLeaguesList">
+                            <div class="text-center">
+                                <div class="spinner-border" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        <% } %>
+
+        <!-- Manage Leagues Tab (Teachers only) -->
+        <% if (typeof user !== 'undefined' && user && user.role === 'Teacher') { %>
+            <div class="tab-pane fade" id="manage" role="tabpanel">
+                <div class="row mt-4">
+                    <div class="col-md-12">
+                        <h4>Manage Your Leagues</h4>
+                        <div id="manageLeaguesList">
+                            <div class="text-center">
+                                <div class="spinner-border" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        <% } %>
+    </div>
 </div>
+
+<!-- Create League Modal (Teachers only) -->
+<% if (typeof user !== 'undefined' && user && user.role === 'Teacher') { %>
+<div class="modal fade" id="createLeagueModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Create New League</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="createLeagueForm">
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="leagueName" class="form-label">League Name *</label>
+                                <input type="text" class="form-control" id="leagueName" name="leagueName" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="classCode" class="form-label">Class Code *</label>
+                                <input type="text" class="form-control" id="classCode" name="classCode" value="<%= user.classCode %>" required>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Description</label>
+                        <textarea class="form-control" id="description" name="description" rows="3"></textarea>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="maxParticipants" class="form-label">Max Participants</label>
+                                <input type="number" class="form-control" id="maxParticipants" name="maxParticipants" value="12" min="4" max="20">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="maxPlayersPerTeam" class="form-label">Players per Team</label>
+                                <input type="number" class="form-control" id="maxPlayersPerTeam" name="maxPlayersPerTeam" value="5" min="3" max="10">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="draftType" class="form-label">Draft Type</label>
+                                <select class="form-select" id="draftType" name="draftType">
+                                    <option value="snake">Snake Draft</option>
+                                    <option value="linear">Linear Draft</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="timeLimitPerPick" class="form-label">Time Limit per Pick (seconds)</label>
+                                <input type="number" class="form-control" id="timeLimitPerPick" name="timeLimitPerPick" value="60" min="30" max="300">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="isPublic" name="isPublic" checked>
+                            <label class="form-check-label" for="isPublic">
+                                Make league public (visible to all students)
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create League</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<% } %>
+
+<!-- Join League Modal -->
+<div class="modal fade" id="joinLeagueModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Join League</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="joinLeagueForm">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="teamName" class="form-label">Team Name *</label>
+                        <input type="text" class="form-control" id="teamName" name="teamName" required>
+                        <div class="form-text">Choose a unique name for your team</div>
+                    </div>
+                    <div id="leagueDetails"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Join League</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+// Pass user data from server
+<% if (typeof user !== 'undefined' && user) { %>
+window.currentUserId = '<%= user.id %>';
+window.currentUserRole = '<%= user.role %>';
+<% } %>
+</script>
+<script src="/js/leagues.js"></script>
 
 <%- include('footer.ejs') %>
