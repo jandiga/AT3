@@ -10,6 +10,7 @@ import dashboardRoutes from './src/routes/dashboard.js';
 import playerRoutes from './src/routes/players.js';
 import leagueRoutes from './src/routes/leagues.js';
 import draftRoutes from './src/routes/draft.js';
+import teamRoutes from './src/routes/teams.js';
 import { isAuthenticated, isTeacher } from './src/middleware/auth.js';
 import draftTimerService from './src/services/draftTimerService.js';
 
@@ -56,6 +57,7 @@ app.use('/dashboard', dashboardRoutes);
 app.use(playerRoutes);
 app.use(leagueRoutes);
 app.use(draftRoutes);
+app.use(teamRoutes);
 
 // Home route
 app.get('/', (req, res) => {

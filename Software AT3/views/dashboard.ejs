@@ -108,22 +108,13 @@
                     </div>
 
                     <div class="mb-3">
-                        <label for="updateAcademicHistory" class="form-label">Academic History</label>
+                        <label for="updateAcademicHistory" class="form-label">Grade Entries</label>
+                        <div class="text-muted small mb-2">Add multiple grade entries with subject, grade, and date</div>
                         <div id="updateAcademicHistory">
                             <!-- Academic history entries will be populated here -->
                         </div>
                         <button type="button" class="btn btn-sm btn-outline-primary" onclick="addUpdateAcademicEntry()">
-                            <i class="bi bi-plus"></i> Add Academic Entry
-                        </button>
-                    </div>
-
-                    <div class="mb-3">
-                        <label for="updateWeeklyContributions" class="form-label">Weekly Study Contributions</label>
-                        <div id="updateWeeklyContributions">
-                            <!-- Weekly contributions will be populated here -->
-                        </div>
-                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="addUpdateWeeklyEntry()">
-                            <i class="bi bi-plus"></i> Add Weekly Entry
+                            <i class="bi bi-plus"></i> Add Grade Entry
                         </button>
                     </div>
                 </div>
@@ -136,4 +127,5 @@
     </div>
 </div>
 
+<script src="/js/dashboard.js"></script>
 <%- include('footer.ejs') %>

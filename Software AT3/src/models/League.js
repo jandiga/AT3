@@ -36,6 +36,21 @@ const leagueSchema = new mongoose.Schema({
         type: Boolean,
         default: true
     },
+    // League duration
+    duration: {
+        type: Number, // Duration in days
+        default: 30, // Default 1 month (30 days)
+        min: 7, // Minimum 1 week
+        max: 365 // Maximum 1 year
+    },
+    endDate: {
+        type: Date,
+        default: function() {
+            // Calculate end date based on duration
+            const startDate = this.dateCreated || new Date();
+            return new Date(startDate.getTime() + (this.duration || 30) * 24 * 60 * 60 * 1000);
+        }
+    },
     // League status
     status: {
         type: String,

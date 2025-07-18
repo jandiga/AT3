@@ -19,8 +19,11 @@ const playerSchema = new mongoose.Schema({
         date: Date
     }],
     weeklyStudyContributions: [{
-        week: String,
-        hoursStudied: Number
+        hoursStudied: Number,
+        date: {
+            type: Date,
+            default: Date.now
+        }
     }],
     createdByTeacherID: {
         type: mongoose.Schema.Types.ObjectId,
@@ -37,42 +40,68 @@ const playerSchema = new mongoose.Schema({
     }
 });
 
-// Virtual for academic score (average of recent academic history)
+// Virtual for academic score (average of last N grades, rounded to whole number)
 playerSchema.virtual('academicScore').get(function() {
     if (!this.academicHistory || this.academicHistory.length === 0) {
         return 0;
     }
 
-    // Calculate average of last 5 academic entries
+    // Calculate average of last 5 academic entries (N = 5)
     const recentEntries = this.academicHistory
-        .filter(entry => entry.score !== null && entry.score !== undefined)
-        .slice(-5);
+        .filter(entry => entry.score !== null && entry.score !== undefined && entry.score >= 0)
+        .slice(-5); // Last N grades (N = 5)
 
     if (recentEntries.length === 0) {
         return 0;
     }
 
     const sum = recentEntries.reduce((total, entry) => total + entry.score, 0);
-    return Math.round((sum / recentEntries.length) * 100) / 100; // Round to 2 decimal places
+    const average = sum / recentEntries.length;
+
+    return Math.round(average); // Round to whole number
 });
 
-// Virtual for effort score (sum of recent weekly contributions)
+// Virtual for effort score (based on grade improvement over time, 1-100 scale)
 playerSchema.virtual('effortScore').get(function() {
-    if (!this.weeklyStudyContributions || this.weeklyStudyContributions.length === 0) {
-        return 0;
+    if (!this.academicHistory || this.academicHistory.length < 2) {
+        return 1; // Minimum score if not enough data for improvement calculation
     }
 
-    // Sum of last 4 weeks of study contributions
-    const recentContributions = this.weeklyStudyContributions
-        .filter(entry => entry.hoursStudied !== null && entry.hoursStudied !== undefined)
-        .slice(-4);
+    // Get valid academic scores sorted by date
+    const validScores = this.academicHistory
+        .filter(entry => entry.score !== null && entry.score !== undefined && entry.date)
+        .sort((a, b) => new Date(a.date) - new Date(b.date))
+        .map(entry => entry.score);
 
-    if (recentContributions.length === 0) {
-        return 0;
+    if (validScores.length < 2) {
+        return 1; // Minimum score if not enough valid data
     }
 
-    const sum = recentContributions.reduce((total, entry) => total + entry.hoursStudied, 0);
-    return Math.round(sum * 100) / 100; // Round to 2 decimal places
+    // Calculate improvement over time
+    let totalImprovement = 0;
+    let improvementCount = 0;
+
+    for (let i = 1; i < validScores.length; i++) {
+        const improvement = validScores[i] - validScores[i - 1];
+        if (improvement > 0) { // Only count positive improvements
+            totalImprovement += improvement;
+            improvementCount++;
+        }
+    }
+
+    if (improvementCount === 0) {
+        return 1; // Minimum score if no positive improvements
+    }
+
+    // Calculate average improvement per grade change
+    const averageImprovement = totalImprovement / improvementCount;
+
+    // Scale to 1-100 range
+    // Assume maximum reasonable improvement per grade is 30 points
+    const maxImprovement = 30;
+    let effortScore = Math.min(100, Math.max(1, (averageImprovement / maxImprovement) * 100));
+
+    return Math.round(effortScore);
 });
 
 // Virtual for total score (academic + effort)

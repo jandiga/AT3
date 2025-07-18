@@ -123,7 +123,7 @@ function updateLeagueActions() {
 // Load teams tab
 function loadTeamsTab() {
     const teamsDiv = document.getElementById('teamsContent');
-    
+
     if (!leagueData.participants || leagueData.participants.length === 0) {
         teamsDiv.innerHTML = `
             <div class="alert alert-info">
@@ -132,56 +132,81 @@ function loadTeamsTab() {
         `;
         return;
     }
-    
-    const teamsHtml = leagueData.participants.map(participant => {
-        const team = participant.teamID;
-        const isMyTeam = participant.userID._id === currentUser.id;
-        
-        const rosterHtml = team?.roster?.filter(r => r.isActive).map(rosterEntry => `
-            <tr>
-                <td>${escapeHtml(rosterEntry.playerID?.name || 'Unknown Player')}</td>
-                <td>R${rosterEntry.draftRound} P${rosterEntry.draftPick}</td>
-                <td>${new Date(rosterEntry.draftedAt).toLocaleDateString()}</td>
-            </tr>
-        `).join('') || '<tr><td colspan="3" class="text-muted">No players drafted</td></tr>';
-        
-        return `
-            <div class="card mb-3 ${isMyTeam ? 'border-primary' : ''}">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <div>
-                        <h6 class="mb-0">${escapeHtml(team?.teamName || 'Unknown Team')}</h6>
-                        <small class="text-muted">
-                            Manager: ${escapeHtml(participant.userID.name)}
-                            ${isMyTeam ? ' (You)' : ''}
-                        </small>
-                    </div>
-                    <div>
-                        <span class="badge bg-secondary">
-                            ${team?.roster?.filter(r => r.isActive).length || 0}/${leagueData.maxPlayersPerTeam} players
-                        </span>
-                    </div>
-                </div>
-                <div class="card-body">
-                    <div class="table-responsive">
-                        <table class="table table-sm">
-                            <thead>
-                                <tr>
-                                    <th>Player</th>
-                                    <th>Draft Position</th>
-                                    <th>Drafted</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${rosterHtml}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        `;
-    }).join('');
-    
+
+    // Sort teams by total score (descending)
+    const sortedTeams = [...leagueData.participants].sort((a, b) => {
+        const scoreA = a.teamID?.currentScores?.totalScore || 0;
+        const scoreB = b.teamID?.currentScores?.totalScore || 0;
+        return scoreB - scoreA;
+    });
+
+    const teamsHtml = `
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Rank</th>
+                        <th>Team</th>
+                        <th>Manager</th>
+                        <th>Players</th>
+                        <th>Total Score</th>
+                        <th>Academic Score</th>
+                        <th>Effort Score</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${sortedTeams.map((participant, index) => {
+                        const team = participant.teamID;
+                        const isMyTeam = participant.userID._id === currentUser.id;
+                        const scores = team?.currentScores || {};
+                        const playerCount = team?.roster?.filter(r => r.isActive).length || 0;
+
+                        return `
+                            <tr class="${isMyTeam ? 'table-primary' : ''}">
+                                <td>
+                                    <span class="badge ${index === 0 ? 'bg-warning' : index === 1 ? 'bg-secondary' : index === 2 ? 'bg-dark' : 'bg-light text-dark'}">
+                                        ${index + 1}
+                                    </span>
+                                </td>
+                                <td>
+                                    <a href="/teams/${team?._id}" class="text-decoration-none fw-bold">
+                                        ${escapeHtml(team?.teamName || 'Unknown Team')}
+                                    </a>
+                                    ${isMyTeam ? '<small class="text-muted"> (Your Team)</small>' : ''}
+                                </td>
+                                <td>${escapeHtml(participant.userID.name)}</td>
+                                <td>
+                                    <span class="badge bg-info">
+                                        ${playerCount}/${leagueData.maxPlayersPerTeam}
+                                    </span>
+                                </td>
+                                <td><strong>${(scores.totalScore || 0).toFixed(1)}</strong></td>
+                                <td>${(scores.academicScore || 0).toFixed(1)}</td>
+                                <td>${(scores.effortScore || 0).toFixed(1)}</td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-primary" onclick="viewTeamDetails('${team?._id}')">
+                                        <i class="bi bi-eye"></i> View
+                                    </button>
+                                </td>
+                            </tr>
+                        `;
+                    }).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
+
     teamsDiv.innerHTML = teamsHtml;
+}
+
+// View team details
+function viewTeamDetails(teamId) {
+    if (teamId && teamId !== 'undefined') {
+        window.open(`/teams/${teamId}`, '_blank');
+    } else {
+        showError('Team details not available');
+    }
 }
 
 // Load players tab
@@ -379,7 +404,7 @@ async function handleUpdatePlayer(event) {
     }
 
     try {
-        const response = await fetch(`/api/players/${selectedPlayerId}/update`, {
+        const response = await fetch(`/api/leagues/${leagueId}/players/${selectedPlayerId}`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json'

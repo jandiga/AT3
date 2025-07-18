@@ -84,7 +84,8 @@ router.post('/api/leagues/create', isAuthenticated, isTeacher, async (req, res) 
             isPublic,
             draftType,
             timeLimitPerPick,
-            autoDraft
+            autoDraft,
+            duration
         } = req.body;
 
         // Validate required fields
@@ -101,6 +102,10 @@ router.post('/api/leagues/create', isAuthenticated, isTeacher, async (req, res) 
             createdByTeacherID: req.session.user.id 
         });
 
+        const leagueDuration = duration ? parseInt(duration) : 30;
+        const startDate = new Date();
+        const endDate = new Date(startDate.getTime() + leagueDuration * 24 * 60 * 60 * 1000);
+
         const league = new League({
             leagueName,
             description,
@@ -109,6 +114,8 @@ router.post('/api/leagues/create', isAuthenticated, isTeacher, async (req, res) 
             maxParticipants: maxParticipants || 12,
             maxPlayersPerTeam: maxPlayersPerTeam || 5,
             isPublic: isPublic !== false,
+            duration: leagueDuration,
+            endDate: endDate,
             draftSettings: {
                 draftType: draftType || 'snake',
                 timeLimitPerPick: timeLimitPerPick || 60,
@@ -335,21 +342,23 @@ router.put('/api/leagues/:leagueId/players/:playerId', isAuthenticated, isTeache
         // Update academic history if provided
         if (academicScore !== undefined) {
             player.academicHistory.push({
-                grade_percent: academicScore,
+                score: academicScore,
                 date: new Date()
             });
         }
 
         // Update effort contributions if provided
         if (effortHours !== undefined) {
-            const currentWeek = Math.floor(Date.now() / (7 * 24 * 60 * 60 * 1000));
             player.weeklyStudyContributions.push({
-                hours: effortHours,
-                week: currentWeek
+                hoursStudied: effortHours,
+                date: new Date()
             });
         }
 
         await player.save();
+
+        // Update team scores in all leagues this player is part of
+        await updateTeamScoresForPlayer(playerId);
 
         res.json({
             success: true,
@@ -616,5 +625,89 @@ router.post('/api/leagues/:leagueId/end', isAuthenticated, isTeacher, async (req
         });
     }
 });
+
+// Helper function to update team scores when a player's score changes
+async function updateTeamScoresForPlayer(playerId) {
+    try {
+        console.log(`Updating team scores for player: ${playerId}`);
+
+        // Find all teams that have this player in their roster
+        const teams = await Team.find({
+            'roster.playerID': playerId,
+            'roster.isActive': true
+        });
+
+        console.log(`Found ${teams.length} teams containing player ${playerId}`);
+
+        for (const team of teams) {
+            try {
+                console.log(`Updating scores for team: ${team.teamName} (${team._id})`);
+
+                // Update the team's current scores
+                await team.updateCurrentScores();
+
+                console.log(`Successfully updated team ${team.teamName} scores:`, {
+                    totalScore: team.currentScores.totalScore,
+                    academicScore: team.currentScores.academicScore,
+                    effortScore: team.currentScores.effortScore
+                });
+
+                // Find leagues containing this team and update rankings
+                const leagues = await League.find({
+                    'participants.teamID': team._id
+                });
+
+                for (const league of leagues) {
+                    console.log(`Updating rankings for league: ${league.leagueName}`);
+                    await updateLeagueRankings(league._id);
+                }
+
+            } catch (teamError) {
+                console.error(`Error updating team ${team.teamName}:`, teamError);
+            }
+        }
+
+    } catch (error) {
+        console.error('Error updating team scores for player:', error);
+    }
+}
+
+// Helper function to update league rankings
+async function updateLeagueRankings(leagueId) {
+    try {
+        const league = await League.findById(leagueId).populate({
+            path: 'participants.teamID',
+            select: 'teamName currentScores'
+        });
+
+        if (!league) {
+            console.error(`League not found: ${leagueId}`);
+            return;
+        }
+
+        // Get all teams with scores
+        const teamsWithScores = league.participants
+            .filter(p => p.teamID && p.isActive)
+            .map(p => ({
+                teamId: p.teamID._id,
+                teamName: p.teamID.teamName,
+                totalScore: p.teamID.currentScores?.totalScore || 0
+            }))
+            .sort((a, b) => b.totalScore - a.totalScore); // Sort by score descending
+
+        // Update team rankings
+        for (let i = 0; i < teamsWithScores.length; i++) {
+            await Team.findByIdAndUpdate(teamsWithScores[i].teamId, {
+                'stats.rank': i + 1
+            });
+        }
+
+        console.log(`Updated rankings for league ${league.leagueName}:`,
+            teamsWithScores.map((t, i) => `${i + 1}. ${t.teamName}: ${t.totalScore}`));
+
+    } catch (error) {
+        console.error('Error updating league rankings:', error);
+    }
+}
 
 export default router;

@@ -1,0 +1,157 @@
+<%- include('header.ejs') %>
+
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h1><%= team.teamName %></h1>
+                    <p class="text-muted">
+                        League: <a href="/leagues/<%= team.leagueID._id %>" class="text-decoration-none"><%= team.leagueID.leagueName %></a>
+                        <% if (isOwner) { %>
+                            <span class="badge bg-primary ms-2">Your Team</span>
+                        <% } %>
+                    </p>
+                </div>
+                <div>
+                    <a href="/leagues/<%= team.leagueID._id %>" class="btn btn-outline-secondary">
+                        <i class="bi bi-arrow-left"></i> Back to League
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Team Stats Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h5 class="card-title">Total Score</h5>
+                    <h3 class="text-primary"><%= (team.currentScores?.totalScore || 0).toFixed(1) %></h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h5 class="card-title">Academic Score</h5>
+                    <h3 class="text-success"><%= (team.currentScores?.academicScore || 0).toFixed(1) %></h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h5 class="card-title">Effort Score</h5>
+                    <h3 class="text-info"><%= (team.currentScores?.effortScore || 0).toFixed(1) %></h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h5 class="card-title">Team Rank</h5>
+                    <h3 class="text-warning">
+                        <% if (team.stats?.rank) { %>
+                            #<%= team.stats.rank %>
+                        <% } else { %>
+                            -
+                        <% } %>
+                    </h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Team Information -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Team Information</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>Manager:</strong> <%= team.ownerID.name %></p>
+                            <p><strong>League:</strong> <%= team.leagueID.leagueName %></p>
+                            <p><strong>League Status:</strong> 
+                                <span class="badge bg-<%= team.leagueID.status === 'active' ? 'success' : team.leagueID.status === 'draft' ? 'warning' : 'secondary' %>">
+                                    <%= team.leagueID.status %>
+                                </span>
+                            </p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Players:</strong> <%= team.roster.filter(r => r.isActive).length %> active</p>
+                            <p><strong>Created:</strong> <%= new Date(team.dateCreated).toLocaleDateString() %></p>
+                            <p><strong>Last Score Update:</strong> 
+                                <% if (team.currentScores?.lastUpdated) { %>
+                                    <%= new Date(team.currentScores.lastUpdated).toLocaleString() %>
+                                <% } else { %>
+                                    Never
+                                <% } %>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Player Roster -->
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Player Roster</h5>
+                </div>
+                <div class="card-body">
+                    <% if (team.roster && team.roster.filter(r => r.isActive).length > 0) { %>
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Player</th>
+                                        <th>Academic Score</th>
+                                        <th>Effort Score</th>
+                                        <th>Total Score</th>
+                                        <th>Draft Info</th>
+                                        <th>Drafted</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <% team.roster.filter(r => r.isActive).forEach(rosterEntry => { %>
+                                        <% const player = rosterEntry.playerID; %>
+                                        <tr>
+                                            <td>
+                                                <strong><%= player.name %></strong>
+                                            </td>
+                                            <td><%= player.academicScore || 0 %></td>
+                                            <td><%= player.effortScore || 0 %></td>
+                                            <td><strong><%= player.totalScore || 0 %></strong></td>
+                                            <td>
+                                                <% if (rosterEntry.draftRound && rosterEntry.draftPick) { %>
+                                                    R<%= rosterEntry.draftRound %> P<%= rosterEntry.draftPick %>
+                                                <% } else { %>
+                                                    -
+                                                <% } %>
+                                            </td>
+                                            <td><%= new Date(rosterEntry.draftedAt).toLocaleDateString() %></td>
+                                        </tr>
+                                    <% }) %>
+                                </tbody>
+                            </table>
+                        </div>
+                    <% } else { %>
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i> No players on this team yet.
+                        </div>
+                    <% } %>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<%- include('footer.ejs') %>

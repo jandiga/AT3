@@ -1,7 +1,6 @@
 // Dashboard JavaScript functionality
 
 let updateAcademicEntryCount = 0;
-let updateWeeklyEntryCount = 0;
 
 // Show update player modal
 async function showUpdatePlayerModal(playerId, playerName) {
@@ -34,18 +33,7 @@ async function showUpdatePlayerModal(playerId, playerName) {
             });
         }
         
-        // Clear and populate weekly contributions
-        const weeklyContainer = document.getElementById('updateWeeklyContributions');
-        weeklyContainer.innerHTML = '';
-        updateWeeklyEntryCount = 0;
-        
-        if (player.weeklyStudyContributions && player.weeklyStudyContributions.length > 0) {
-            player.weeklyStudyContributions.forEach(entry => {
-                if (entry.hoursStudied !== null && entry.hoursStudied !== undefined) {
-                    addUpdateWeeklyEntry(entry.week, entry.hoursStudied);
-                }
-            });
-        }
+
         
         // Show modal
         const modal = new bootstrap.Modal(document.getElementById('updatePlayerModal'));
@@ -86,31 +74,7 @@ function addUpdateAcademicEntry(subject = '', score = '', date = '') {
     container.appendChild(entryDiv);
 }
 
-// Add weekly entry to update form
-function addUpdateWeeklyEntry(week = '', hours = '') {
-    updateWeeklyEntryCount++;
-    const container = document.getElementById('updateWeeklyContributions');
-    
-    const entryDiv = document.createElement('div');
-    entryDiv.className = 'row mb-2';
-    entryDiv.id = `updateWeeklyEntry${updateWeeklyEntryCount}`;
-    
-    entryDiv.innerHTML = `
-        <div class="col-md-5">
-            <input type="text" class="form-control" name="weeklyWeek[]" placeholder="Week (e.g., Week 1)" value="${week}" required>
-        </div>
-        <div class="col-md-5">
-            <input type="number" class="form-control" name="weeklyHours[]" placeholder="Hours studied" min="0" step="0.5" value="${hours}" required>
-        </div>
-        <div class="col-md-2">
-            <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeUpdateWeeklyEntry(${updateWeeklyEntryCount})">
-                <i class="bi bi-trash"></i>
-            </button>
-        </div>
-    `;
-    
-    container.appendChild(entryDiv);
-}
+
 
 // Remove academic entry from update form
 function removeUpdateAcademicEntry(entryId) {
@@ -120,13 +84,7 @@ function removeUpdateAcademicEntry(entryId) {
     }
 }
 
-// Remove weekly entry from update form
-function removeUpdateWeeklyEntry(entryId) {
-    const entry = document.getElementById(`updateWeeklyEntry${entryId}`);
-    if (entry) {
-        entry.remove();
-    }
-}
+
 
 // Handle update player form submission
 document.addEventListener('DOMContentLoaded', function() {
@@ -142,8 +100,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Build the update data
                 const updateData = {
                     name: formData.get('name'),
-                    academicHistory: [],
-                    weeklyStudyContributions: []
+                    academicHistory: []
                 };
                 
                 // Process academic history
@@ -159,22 +116,6 @@ document.addEventListener('DOMContentLoaded', function() {
                                 subject: subjects[i],
                                 score: score,
                                 date: new Date(dates[i])
-                            });
-                        }
-                    }
-                }
-                
-                // Process weekly contributions
-                const weeks = formData.getAll('weeklyWeek[]');
-                const hours = formData.getAll('weeklyHours[]');
-                
-                for (let i = 0; i < weeks.length; i++) {
-                    if (weeks[i] && hours[i]) {
-                        const hoursStudied = parseFloat(hours[i]);
-                        if (!isNaN(hoursStudied) && hoursStudied >= 0) {
-                            updateData.weeklyStudyContributions.push({
-                                week: weeks[i],
-                                hoursStudied: hoursStudied
                             });
                         }
                     }

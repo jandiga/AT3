@@ -146,7 +146,7 @@
                         </div>
                     </div>
                     <div class="row">
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <div class="mb-3">
                                 <label for="draftType" class="form-label">Draft Type</label>
                                 <select class="form-select" id="draftType" name="draftType">
@@ -155,10 +155,17 @@
                                 </select>
                             </div>
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <div class="mb-3">
                                 <label for="timeLimitPerPick" class="form-label">Time Limit per Pick (seconds)</label>
                                 <input type="number" class="form-control" id="timeLimitPerPick" name="timeLimitPerPick" value="60" min="30" max="300">
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label for="duration" class="form-label">League Duration (days)</label>
+                                <input type="number" class="form-control" id="duration" name="duration" value="30" min="7" max="365">
+                                <div class="form-text">Default: 30 days (1 month)</div>
                             </div>
                         </div>
                     </div>

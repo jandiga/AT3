@@ -8,36 +8,82 @@
   <% if (user.role === 'Student') { %>
     <div class="row mt-4">
         <div class="col-md-12">
-            <h3>Your Team</h3>
-            <% if (typeof players !== 'undefined' && players && players.length > 0) { %>
-                <div class="table-responsive">
-                    <table class="table">
-                        <thead>
-                            <tr>
-                                <th>Name</th>
-                                <th>Total Score</th>
-                                <th>Academic Score</th>
-                                <th>Effort Score</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <% players.forEach(player => { %>
-                                <tr>
-                                    <td><%= player.name %></td>
-                                    <td><%= player.totalScore %></td>
-                                    <td><%= player.academicScore %></td>
-                                    <td><%= player.effortScore %></td>
-                                    <td>
-                                        <button class="btn btn-sm btn-primary">Update</button>
-                                    </td>
-                                </tr>
-                            <% }) %>
-                        </tbody>
-                    </table>
-                </div>
+            <h3>Your Teams</h3>
+            <% if (typeof teams !== 'undefined' && teams && teams.length > 0) { %>
+                <% teams.forEach(team => { %>
+                    <div class="card mb-4">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <div>
+                                <h5 class="mb-0"><%= team.teamName %></h5>
+                                <small class="text-muted">League: <%= team.leagueID ? team.leagueID.leagueName : 'Unknown League' %></small>
+                            </div>
+                            <div>
+                                <a href="/teams/<%= team._id %>" class="btn btn-sm btn-primary">
+                                    <i class="bi bi-eye"></i> View Details
+                                </a>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <!-- Team Stats -->
+                            <div class="row mb-3">
+                                <div class="col-md-3">
+                                    <div class="text-center">
+                                        <h6 class="text-muted">Total Score</h6>
+                                        <h4 class="text-primary"><%= (team.currentScores?.totalScore || 0).toFixed(1) %></h4>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="text-center">
+                                        <h6 class="text-muted">Academic</h6>
+                                        <h4 class="text-success"><%= (team.currentScores?.academicScore || 0).toFixed(1) %></h4>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="text-center">
+                                        <h6 class="text-muted">Effort</h6>
+                                        <h4 class="text-info"><%= (team.currentScores?.effortScore || 0).toFixed(1) %></h4>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="text-center">
+                                        <h6 class="text-muted">Rank</h6>
+                                        <h4 class="text-warning">
+                                            <% if (team.stats?.rank) { %>
+                                                #<%= team.stats.rank %>
+                                            <% } else { %>
+                                                -
+                                            <% } %>
+                                        </h4>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Player Roster Summary -->
+                            <h6>Players (<%= team.roster.filter(r => r.isActive).length %> active)</h6>
+                            <% if (team.roster && team.roster.filter(r => r.isActive).length > 0) { %>
+                                <div class="row">
+                                    <% team.roster.filter(r => r.isActive).forEach(rosterEntry => { %>
+                                        <div class="col-md-6 mb-2">
+                                            <div class="d-flex justify-content-between align-items-center p-2 bg-light rounded">
+                                                <span><%= rosterEntry.playerID?.name || 'Unknown Player' %></span>
+                                                <small class="text-muted">
+                                                    Score: <%= (rosterEntry.playerID?.totalScore || 0).toFixed(1) %>
+                                                </small>
+                                            </div>
+                                        </div>
+                                    <% }) %>
+                                </div>
+                            <% } else { %>
+                                <p class="text-muted">No players drafted yet.</p>
+                            <% } %>
+                        </div>
+                    </div>
+                <% }) %>
             <% } else { %>
-                <p>No players found. Start by adding players to your team.</p>
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i> You haven't joined any leagues yet.
+                    <a href="/leagues" class="alert-link">Browse available leagues</a> to get started!
+                </div>
             <% } %>
         </div>
     </div>
@@ -47,6 +93,7 @@
             <h3>Your Profile Information</h3>
             <p>Role: <%= user.role %></p>
             <p>Email: <%= user.email %></p>
+            <p>Class: <%= user.classCode %></p>
             <!-- Add more teacher-specific profile information here -->
         </div>
     </div>

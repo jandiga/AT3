@@ -38,40 +38,7 @@ router.post('/api/players/create', isAuthenticated, isTeacher, async (req, res) 
     }
 });
 
-// Get single player details
-router.get('/api/players/:playerId', isAuthenticated, isTeacher, async (req, res) => {
-    try {
-        const { playerId } = req.params;
 
-        const player = await Player.findById(playerId);
-
-        if (!player) {
-            return res.status(404).json({
-                success: false,
-                error: 'Player not found'
-            });
-        }
-
-        // Check if teacher created this player
-        if (player.createdByTeacherID.toString() !== req.session.user.id) {
-            return res.status(403).json({
-                success: false,
-                error: 'Access denied'
-            });
-        }
-
-        res.json({
-            success: true,
-            player: player
-        });
-    } catch (error) {
-        console.error('Error fetching player:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
-    }
-});
 
 // Update player (simple endpoint for dashboard)
 router.put('/api/players/:playerId', isAuthenticated, isTeacher, async (req, res) => {
@@ -152,7 +119,7 @@ router.put('/api/players/:playerId/update', isAuthenticated, isTeacher, async (r
             }
 
             player.academicHistory.push({
-                grade_percent: academicScore,
+                score: academicScore,
                 date: new Date()
             });
         }
@@ -166,23 +133,11 @@ router.put('/api/players/:playerId/update', isAuthenticated, isTeacher, async (r
                 });
             }
 
-            const currentWeek = Math.floor(Date.now() / (7 * 24 * 60 * 60 * 1000));
-
-            // Check if there's already an entry for this week
-            const existingWeekIndex = player.weeklyStudyContributions.findIndex(
-                entry => entry.week === currentWeek
-            );
-
-            if (existingWeekIndex >= 0) {
-                // Update existing week entry
-                player.weeklyStudyContributions[existingWeekIndex].hours = effortHours;
-            } else {
-                // Add new week entry
-                player.weeklyStudyContributions.push({
-                    hours: effortHours,
-                    week: currentWeek
-                });
-            }
+            // Add new study contribution entry
+            player.weeklyStudyContributions.push({
+                hoursStudied: effortHours,
+                date: new Date()
+            });
         }
 
         // Update notes if provided
@@ -191,6 +146,9 @@ router.put('/api/players/:playerId/update', isAuthenticated, isTeacher, async (r
         }
 
         await player.save();
+
+        // Update team scores in all leagues this player is part of
+        await updateTeamScoresForPlayer(playerId);
 
         res.json({
             success: true,
@@ -399,39 +357,148 @@ router.put('/api/players/bulk-update', isAuthenticated, isTeacher, async (req, r
 // Helper function to update team scores when a player's score changes
 async function updateTeamScoresForPlayer(playerId) {
     try {
+        console.log(`Updating team scores for player: ${playerId}`);
+
         // Import models here to avoid circular dependencies
         const League = (await import('../models/League.js')).default;
+        const Team = (await import('../models/Team.js')).default;
 
-        // Find all leagues where this player is drafted
-        const leagues = await League.find({
-            'participants.teamID': { $exists: true }
-        }).populate({
-            path: 'participants.teamID',
-            populate: {
-                path: 'roster.playerID',
-                select: '_id'
-            }
+        // Find all teams that have this player in their roster
+        const teams = await Team.find({
+            'roster.playerID': playerId,
+            'roster.isActive': true
         });
 
-        for (const league of leagues) {
-            for (const participant of league.participants) {
-                if (participant.teamID && participant.teamID.roster) {
-                    // Check if this team has the updated player
-                    const hasPlayer = participant.teamID.roster.some(rosterEntry =>
-                        rosterEntry.playerID && rosterEntry.playerID._id.toString() === playerId.toString()
-                    );
+        console.log(`Found ${teams.length} teams containing player ${playerId}`);
 
-                    if (hasPlayer) {
-                        // Update team scores
-                        await participant.teamID.updateCurrentScores();
-                        console.log(`Updated scores for team ${participant.teamID.teamName} in league ${league.leagueName}`);
-                    }
+        for (const team of teams) {
+            try {
+                console.log(`Updating scores for team: ${team.teamName} (${team._id})`);
+
+                // Update the team's current scores
+                await team.updateCurrentScores();
+
+                console.log(`Successfully updated team ${team.teamName} scores:`, {
+                    totalScore: team.currentScores.totalScore,
+                    academicScore: team.currentScores.academicScore,
+                    effortScore: team.currentScores.effortScore
+                });
+
+                // Find leagues containing this team and update rankings
+                const leagues = await League.find({
+                    'participants.teamID': team._id
+                });
+
+                for (const league of leagues) {
+                    console.log(`Updating rankings for league: ${league.leagueName}`);
+                    await updateLeagueRankings(league._id);
                 }
+
+            } catch (teamError) {
+                console.error(`Error updating team ${team.teamName}:`, teamError);
             }
         }
+
     } catch (error) {
         console.error('Error updating team scores for player:', error);
     }
 }
+
+// Helper function to update league rankings
+async function updateLeagueRankings(leagueId) {
+    try {
+        const League = (await import('../models/League.js')).default;
+
+        const league = await League.findById(leagueId).populate({
+            path: 'participants.teamID',
+            select: 'teamName currentScores'
+        });
+
+        if (!league) {
+            console.error(`League not found: ${leagueId}`);
+            return;
+        }
+
+        // Get all teams with scores
+        const teamsWithScores = league.participants
+            .filter(p => p.teamID && p.isActive)
+            .map(p => ({
+                teamId: p.teamID._id,
+                teamName: p.teamID.teamName,
+                totalScore: p.teamID.currentScores?.totalScore || 0
+            }))
+            .sort((a, b) => b.totalScore - a.totalScore); // Sort by score descending
+
+        // Update team rankings
+        for (let i = 0; i < teamsWithScores.length; i++) {
+            const Team = (await import('../models/Team.js')).default;
+            await Team.findByIdAndUpdate(teamsWithScores[i].teamId, {
+                'stats.rank': i + 1
+            });
+        }
+
+        console.log(`Updated rankings for league ${league.leagueName}:`,
+            teamsWithScores.map((t, i) => `${i + 1}. ${t.teamName}: ${t.totalScore}`));
+
+    } catch (error) {
+        console.error('Error updating league rankings:', error);
+    }
+}
+
+// Endpoint to manually refresh all team scores in a league (for teachers)
+router.post('/api/leagues/:leagueId/refresh-scores', isAuthenticated, isTeacher, async (req, res) => {
+    try {
+        const { leagueId } = req.params;
+
+        const League = (await import('../models/League.js')).default;
+
+        const league = await League.findById(leagueId).populate('participants.teamID');
+
+        if (!league) {
+            return res.status(404).json({
+                success: false,
+                error: 'League not found'
+            });
+        }
+
+        // Check if user is the creator
+        if (league.createdByTeacherID.toString() !== req.session.user.id) {
+            return res.status(403).json({
+                success: false,
+                error: 'Only the league creator can refresh scores'
+            });
+        }
+
+        let updatedTeams = 0;
+
+        // Update scores for all teams in the league
+        for (const participant of league.participants) {
+            if (participant.teamID && participant.isActive) {
+                try {
+                    await participant.teamID.updateCurrentScores();
+                    updatedTeams++;
+                } catch (error) {
+                    console.error(`Error updating team ${participant.teamID.teamName}:`, error);
+                }
+            }
+        }
+
+        // Update league rankings
+        await updateLeagueRankings(leagueId);
+
+        res.json({
+            success: true,
+            message: `Successfully refreshed scores for ${updatedTeams} teams`,
+            updatedTeams: updatedTeams
+        });
+
+    } catch (error) {
+        console.error('Error refreshing league scores:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
 
 export default router;
