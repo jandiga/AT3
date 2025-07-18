@@ -5,6 +5,7 @@ let selectedPlayerId = null;
 let turnTimer = null;
 let timeRemaining = 0;
 let isDrafting = false; // Flag to prevent duplicate draft requests
+let statusPollingInterval = null; // Store the polling interval ID
 
 // Initialize draft page
 document.addEventListener('DOMContentLoaded', function() {
@@ -22,7 +23,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('draftPlayerBtn')?.addEventListener('click', draftSelectedPlayer);
     
     // Refresh draft status every 5 seconds
-    setInterval(loadDraftStatus, 5000);
+    statusPollingInterval = setInterval(loadDraftStatus, 5000);
 });
 
 // Load current draft status
@@ -30,11 +31,21 @@ async function loadDraftStatus() {
     try {
         const response = await fetch(`/api/draft/${leagueId}/status`);
         const data = await response.json();
-        
+
         if (data.success) {
             draftData = data;
             updateDraftDisplay();
+
+            // Stop polling if draft is complete
+            if (draftData.draftState.isDraftComplete) {
+                console.log('Draft is complete, stopping status polling');
+                if (statusPollingInterval) {
+                    clearInterval(statusPollingInterval);
+                    statusPollingInterval = null;
+                }
+            }
         } else {
+            console.error('Draft status error:', data.error);
             showError('Failed to load draft status: ' + data.error);
         }
     } catch (error) {
@@ -57,16 +68,8 @@ function updateDraftDisplay() {
 // Update draft status panel
 function updateDraftStatus() {
     const statusDiv = document.getElementById('draftStatus');
-    
-    if (!draftData.draftState.isActive) {
-        statusDiv.innerHTML = `
-            <div class="alert alert-warning">
-                <i class="bi bi-clock"></i> Draft has not started yet
-            </div>
-        `;
-        return;
-    }
-    
+
+    // Check if draft is complete first
     if (draftData.draftState.isDraftComplete) {
         statusDiv.innerHTML = `
             <div class="alert alert-success">
@@ -74,6 +77,15 @@ function updateDraftStatus() {
             </div>
         `;
         showDraftCompleteModal();
+        return;
+    }
+
+    if (!draftData.draftState.isActive) {
+        statusDiv.innerHTML = `
+            <div class="alert alert-warning">
+                <i class="bi bi-clock"></i> Draft has not started yet
+            </div>
+        `;
         return;
     }
     
@@ -127,22 +139,23 @@ function updateDraftOrder() {
 // Update current pick information
 function updateCurrentPickInfo() {
     const infoDiv = document.getElementById('currentPickInfo');
-    
-    if (!draftData.draftState.isActive) {
-        infoDiv.innerHTML = `
-            <div class="text-center">
-                <h5>Waiting for draft to start...</h5>
-                <p class="text-muted">The draft has not begun yet.</p>
-            </div>
-        `;
-        return;
-    }
-    
+
+    // Check if draft is complete first
     if (draftData.draftState.isDraftComplete) {
         infoDiv.innerHTML = `
             <div class="text-center">
                 <h5 class="text-success">Draft Complete!</h5>
                 <p class="text-muted">All teams have been filled.</p>
+            </div>
+        `;
+        return;
+    }
+
+    if (!draftData.draftState.isActive) {
+        infoDiv.innerHTML = `
+            <div class="text-center">
+                <h5>Waiting for draft to start...</h5>
+                <p class="text-muted">The draft has not begun yet.</p>
             </div>
         `;
         return;
@@ -295,28 +308,35 @@ function updateTimer() {
     if (draftData.isUserTurn) {
         timerCard.style.display = 'block';
         autoPickBtn.style.display = 'block';
-        
-        // Start timer if not already running
-        if (!turnTimer) {
-            timeRemaining = draftData.draftSettings.timeLimitPerPick;
-            turnTimer = setInterval(() => {
-                timeRemaining--;
-                
-                const minutes = Math.floor(timeRemaining / 60);
-                const seconds = timeRemaining % 60;
-                timerDiv.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-                
-                if (timeRemaining <= 10) {
-                    timerDiv.classList.add('timer-warning');
-                }
-                
-                if (timeRemaining <= 0) {
-                    clearInterval(turnTimer);
-                    turnTimer = null;
-                    makeAutoPick();
-                }
-            }, 1000);
+
+        // Clear any existing timer and start fresh
+        if (turnTimer) {
+            clearInterval(turnTimer);
+            turnTimer = null;
         }
+
+        // Reset timer display styling
+        timerDiv.classList.remove('timer-warning');
+
+        // Start new timer
+        timeRemaining = draftData.draftSettings.timeLimitPerPick;
+        turnTimer = setInterval(() => {
+            timeRemaining--;
+
+            const minutes = Math.floor(timeRemaining / 60);
+            const seconds = timeRemaining % 60;
+            timerDiv.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+
+            if (timeRemaining <= 10) {
+                timerDiv.classList.add('timer-warning');
+            }
+
+            if (timeRemaining <= 0) {
+                clearInterval(turnTimer);
+                turnTimer = null;
+                makeAutoPick();
+            }
+        }, 1000);
     } else {
         timerCard.style.display = 'none';
         autoPickBtn.style.display = 'none';

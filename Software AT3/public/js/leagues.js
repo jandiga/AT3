@@ -259,10 +259,21 @@ function getStatusText(status) {
 
 // Get action buttons for browse leagues
 function getLeagueActions(league) {
-    if (league.status === 'open') {
+    const currentUserId = getCurrentUserId();
+    const isParticipant = league.participants && league.participants.some(p =>
+        p.userID._id === currentUserId && p.isActive
+    );
+
+    if (league.status === 'open' && !isParticipant) {
         return `
             <button class="btn btn-primary btn-sm" onclick="showJoinLeagueModal('${league._id}')">
                 <i class="bi bi-plus-circle"></i> Join League
+            </button>
+        `;
+    } else if (league.status === 'open' && isParticipant) {
+        return `
+            <button class="btn btn-outline-success btn-sm" disabled>
+                <i class="bi bi-check-circle"></i> Already Joined
             </button>
         `;
     } else if (league.status === 'drafting') {
@@ -324,7 +335,15 @@ function getManageLeagueActions(league) {
             </button>
         `;
     }
-    
+
+    if (league.status === 'active') {
+        actions += `
+            <button class="btn btn-danger btn-sm me-2" onclick="endLeague('${league._id}')">
+                <i class="bi bi-stop-circle"></i> End League
+            </button>
+        `;
+    }
+
     actions += `
         <button class="btn btn-outline-primary btn-sm" onclick="manageLeague('${league._id}')">
             <i class="bi bi-gear"></i> Manage
@@ -416,6 +435,28 @@ async function openLeague(leagueId) {
         } catch (error) {
             console.error('Error opening league:', error);
             showError('Failed to open league');
+        }
+    }
+}
+
+async function endLeague(leagueId) {
+    if (confirm('Are you sure you want to end this league? This will mark it as completed and cannot be undone.')) {
+        try {
+            const response = await fetch(`/api/leagues/${leagueId}/end`, {
+                method: 'POST'
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                showSuccess('League ended successfully!');
+                loadManageLeagues();
+            } else {
+                showError('Failed to end league: ' + result.error);
+            }
+        } catch (error) {
+            console.error('Error ending league:', error);
+            showError('Failed to end league');
         }
     }
 }

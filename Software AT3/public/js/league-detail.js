@@ -73,7 +73,9 @@ function updateLeagueActions() {
     let actions = '';
     
     const isCreator = leagueData.createdByTeacherID._id === currentUser.id;
-    const isParticipant = leagueData.participants.some(p => p.userID._id === currentUser.id);
+    const isParticipant = leagueData.participants.some(p =>
+        p.userID._id === currentUser.id && p.isActive
+    );
     
     if (leagueData.status === 'open' && !isParticipant && currentUser.role === 'Student') {
         actions += `
@@ -106,7 +108,15 @@ function updateLeagueActions() {
             </button>
         `;
     }
-    
+
+    if (isCreator && leagueData.status === 'active') {
+        actions += `
+            <button class="btn btn-danger" onclick="endLeague()">
+                <i class="bi bi-stop-circle"></i> End League
+            </button>
+        `;
+    }
+
     actionsDiv.innerHTML = actions;
 }
 
@@ -452,9 +462,9 @@ async function startDraft() {
             const response = await fetch(`/api/leagues/${leagueId}/start-draft`, {
                 method: 'POST'
             });
-            
+
             const result = await response.json();
-            
+
             if (result.success) {
                 showSuccess('Draft started successfully!');
                 window.location.href = `/draft/${leagueId}`;
@@ -464,6 +474,28 @@ async function startDraft() {
         } catch (error) {
             console.error('Error starting draft:', error);
             showError('Failed to start draft');
+        }
+    }
+}
+
+async function endLeague() {
+    if (confirm('Are you sure you want to end this league? This will mark it as completed and cannot be undone.')) {
+        try {
+            const response = await fetch(`/api/leagues/${leagueId}/end`, {
+                method: 'POST'
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                showSuccess('League ended successfully!');
+                loadLeagueDetails(); // Refresh the page data
+            } else {
+                showError('Failed to end league: ' + result.error);
+            }
+        } catch (error) {
+            console.error('Error ending league:', error);
+            showError('Failed to end league');
         }
     }
 }

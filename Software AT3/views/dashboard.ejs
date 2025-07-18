@@ -32,7 +32,9 @@
                                         <td><%= player.academicScore %></td>
                                         <td><%= player.effortScore %></td>
                                         <td>
-                                            <button class="btn btn-sm btn-primary">Update</button>
+                                            <button class="btn btn-sm btn-outline-primary" onclick="showUpdatePlayerModal('<%= player._id %>', '<%= player.name %>')">
+                                                <i class="bi bi-pencil"></i> Update
+                                            </button>
                                         </td>
                                     </tr>
                                 <% }) %>
@@ -71,7 +73,9 @@
                                         <td><%= player.academicScore %></td>
                                         <td><%= player.effortScore %></td>
                                         <td>
-                                            <button class="btn btn-sm btn-primary">Update</button>
+                                            <button class="btn btn-sm btn-outline-primary" onclick="showUpdatePlayerModal('<%= player._id %>', '<%= player.name %>')">
+                                                <i class="bi bi-pencil"></i> Update
+                                            </button>
                                         </td>
                                     </tr>
                                 <% }) %>
@@ -84,6 +88,52 @@
             </div>
         </div>
     <% } %>
+</div>
+
+<!-- Update Player Modal -->
+<div class="modal fade" id="updatePlayerModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Update Player</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="updatePlayerForm">
+                <div class="modal-body">
+                    <input type="hidden" id="updatePlayerId" name="playerId">
+
+                    <div class="mb-3">
+                        <label for="updatePlayerName" class="form-label">Player Name</label>
+                        <input type="text" class="form-control" id="updatePlayerName" name="name" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="updateAcademicHistory" class="form-label">Academic History</label>
+                        <div id="updateAcademicHistory">
+                            <!-- Academic history entries will be populated here -->
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="addUpdateAcademicEntry()">
+                            <i class="bi bi-plus"></i> Add Academic Entry
+                        </button>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="updateWeeklyContributions" class="form-label">Weekly Study Contributions</label>
+                        <div id="updateWeeklyContributions">
+                            <!-- Weekly contributions will be populated here -->
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="addUpdateWeeklyEntry()">
+                            <i class="bi bi-plus"></i> Add Weekly Entry
+                        </button>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Update Player</button>
+                </div>
+            </form>
+        </div>
+    </div>
 </div>
 
 <%- include('footer.ejs') %>

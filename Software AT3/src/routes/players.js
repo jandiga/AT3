@@ -18,15 +18,8 @@ router.post('/api/players/create', isAuthenticated, isTeacher, async (req, res) 
             classCode,
             notes,
             createdByTeacherID: req.session.user.id,
-            academicHistory: [{
-                score: Number(0),
-                date: new Date()
-            }],
-            weeklyStudyContributions: [{
-                points: Number(0),
-                // what week it is
-                week: Math.floor(Date.now() / (7 * 24 * 60 * 60 * 1000))
-            }]
+            academicHistory: [], // Start with empty array to avoid skewing results
+            weeklyStudyContributions: [] // Start with empty array
         });
 
         await player.save();
@@ -38,6 +31,88 @@ router.post('/api/players/create', isAuthenticated, isTeacher, async (req, res) 
         });
     } catch (error) {
         console.error('Error creating player:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// Get single player details
+router.get('/api/players/:playerId', isAuthenticated, isTeacher, async (req, res) => {
+    try {
+        const { playerId } = req.params;
+
+        const player = await Player.findById(playerId);
+
+        if (!player) {
+            return res.status(404).json({
+                success: false,
+                error: 'Player not found'
+            });
+        }
+
+        // Check if teacher created this player
+        if (player.createdByTeacherID.toString() !== req.session.user.id) {
+            return res.status(403).json({
+                success: false,
+                error: 'Access denied'
+            });
+        }
+
+        res.json({
+            success: true,
+            player: player
+        });
+    } catch (error) {
+        console.error('Error fetching player:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// Update player (simple endpoint for dashboard)
+router.put('/api/players/:playerId', isAuthenticated, isTeacher, async (req, res) => {
+    try {
+        const { playerId } = req.params;
+        const { name, academicHistory, weeklyStudyContributions } = req.body;
+
+        const player = await Player.findById(playerId);
+
+        if (!player) {
+            return res.status(404).json({
+                success: false,
+                error: 'Player not found'
+            });
+        }
+
+        // Check if teacher created this player
+        if (player.createdByTeacherID.toString() !== req.session.user.id) {
+            return res.status(403).json({
+                success: false,
+                error: 'Access denied'
+            });
+        }
+
+        // Update player data
+        if (name) player.name = name;
+        if (academicHistory) player.academicHistory = academicHistory;
+        if (weeklyStudyContributions) player.weeklyStudyContributions = weeklyStudyContributions;
+
+        await player.save();
+
+        // Update team scores in all leagues this player is part of
+        await updateTeamScoresForPlayer(playerId);
+
+        res.json({
+            success: true,
+            message: 'Player updated successfully',
+            player: player
+        });
+    } catch (error) {
+        console.error('Error updating player:', error);
         res.status(500).json({
             success: false,
             error: error.message
@@ -320,5 +395,43 @@ router.put('/api/players/bulk-update', isAuthenticated, isTeacher, async (req, r
         });
     }
 });
+
+// Helper function to update team scores when a player's score changes
+async function updateTeamScoresForPlayer(playerId) {
+    try {
+        // Import models here to avoid circular dependencies
+        const League = (await import('../models/League.js')).default;
+
+        // Find all leagues where this player is drafted
+        const leagues = await League.find({
+            'participants.teamID': { $exists: true }
+        }).populate({
+            path: 'participants.teamID',
+            populate: {
+                path: 'roster.playerID',
+                select: '_id'
+            }
+        });
+
+        for (const league of leagues) {
+            for (const participant of league.participants) {
+                if (participant.teamID && participant.teamID.roster) {
+                    // Check if this team has the updated player
+                    const hasPlayer = participant.teamID.roster.some(rosterEntry =>
+                        rosterEntry.playerID && rosterEntry.playerID._id.toString() === playerId.toString()
+                    );
+
+                    if (hasPlayer) {
+                        // Update team scores
+                        await participant.teamID.updateCurrentScores();
+                        console.log(`Updated scores for team ${participant.teamID.teamName} in league ${league.leagueName}`);
+                    }
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Error updating team scores for player:', error);
+    }
+}
 
 export default router;

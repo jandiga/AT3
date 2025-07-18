@@ -129,6 +129,8 @@ teamSchema.virtual('rosterSpotsAvailable').get(function() {
 
 // Method to add player to roster
 teamSchema.methods.addPlayer = function(playerID, draftRound, draftPick) {
+    console.log(`Team.addPlayer called: playerID=${playerID}, team=${this._id}, teamName=${this.teamName}`);
+
     // Check if player is already on roster
     const existingPlayer = this.roster.find(p =>
         p.playerID.toString() === playerID.toString() && p.isActive
@@ -146,7 +148,15 @@ teamSchema.methods.addPlayer = function(playerID, draftRound, draftPick) {
         isActive: true
     });
 
-    return this.save();
+    console.log(`Player added to roster. New roster length: ${this.roster.length}`);
+
+    return this.save().then(savedTeam => {
+        console.log(`Team saved successfully. Roster count: ${savedTeam.roster.length}`);
+        return savedTeam;
+    }).catch(error => {
+        console.error(`Error saving team: ${error.message}`);
+        throw error;
+    });
 };
 
 // Method to remove player from roster
@@ -176,22 +186,9 @@ teamSchema.methods.calculateCurrentScore = async function() {
         if (rosterEntry.isActive && rosterEntry.playerID) {
             const player = rosterEntry.playerID;
 
-            // Calculate academic score from recent academic history
-            if (player.academicHistory && player.academicHistory.length > 0) {
-                const recentAcademic = player.academicHistory
-                    .slice(-5) // Last 5 entries
-                    .reduce((sum, entry) => sum + (entry.grade_percent || 0), 0) /
-                    Math.min(player.academicHistory.length, 5);
-                academicScore += recentAcademic;
-            }
-
-            // Calculate effort score from recent contributions
-            if (player.weeklyStudyContributions && player.weeklyStudyContributions.length > 0) {
-                const recentEffort = player.weeklyStudyContributions
-                    .slice(-4) // Last 4 weeks
-                    .reduce((sum, entry) => sum + (entry.hours || 0), 0);
-                effortScore += recentEffort;
-            }
+            // Use the player's virtual properties for consistent scoring
+            academicScore += player.academicScore || 0;
+            effortScore += player.effortScore || 0;
         }
     }
 
@@ -206,6 +203,11 @@ teamSchema.methods.calculateCurrentScore = async function() {
     };
 
     return this.save();
+};
+
+// Method to update current scores (alias for calculateCurrentScore)
+teamSchema.methods.updateCurrentScores = async function() {
+    return await this.calculateCurrentScore();
 };
 
 // Method to record weekly score

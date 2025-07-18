@@ -34,7 +34,14 @@ router.get('/api/draft/:leagueId/status', isAuthenticated, async (req, res) => {
             .populate('draftState.pickHistory.playerID', 'name')
             .populate('draftPool', 'name academicHistory weeklyStudyContributions')
             .populate('participants.userID', 'name')
-            .populate('participants.teamID', 'teamName roster');
+            .populate({
+                path: 'participants.teamID',
+                select: 'teamName roster',
+                populate: {
+                    path: 'roster.playerID',
+                    select: 'name'
+                }
+            });
 
         if (!league) {
             console.log(`League not found: ${leagueId}`);
@@ -44,7 +51,7 @@ router.get('/api/draft/:leagueId/status', isAuthenticated, async (req, res) => {
             });
         }
 
-        console.log(`League found: ${league.leagueName}, Status: ${league.status}`);
+        console.log(`League found: ${league.leagueName}, Status: ${league.status}, Draft Active: ${league.draftState.isActive}`);
 
         // Check if user is a participant
         const isParticipant = league.participants.some(p =>
@@ -99,7 +106,14 @@ router.get('/api/draft/:leagueId/status', isAuthenticated, async (req, res) => {
             const activeParticipants = league.participants.filter(p => p.isActive).length;
             const totalPicks = activeParticipants * league.maxPlayersPerTeam;
             const currentPicks = league.draftState.pickHistory ? league.draftState.pickHistory.length : 0;
-            isDraftComplete = !league.draftState.isActive || currentPicks >= totalPicks;
+
+            // Draft is complete if:
+            // 1. Draft is not active, OR
+            // 2. We've reached the total number of picks, OR
+            // 3. We've completed all rounds
+            isDraftComplete = !league.draftState.isActive ||
+                            currentPicks >= totalPicks ||
+                            (league.draftState.currentRound > league.maxPlayersPerTeam);
         } catch (completeError) {
             console.error('Error calculating draft completion:', completeError);
             isDraftComplete = !league.draftState.isActive;
@@ -175,7 +189,13 @@ router.post('/api/draft/:leagueId/pick', isAuthenticated, async (req, res) => {
         }
 
         const league = await League.findById(leagueId)
-            .populate('participants.teamID');
+            .populate({
+                path: 'participants.teamID',
+                populate: {
+                    path: 'roster.playerID',
+                    select: 'name'
+                }
+            });
 
         if (!league) {
             return res.status(404).json({
@@ -240,11 +260,13 @@ router.post('/api/draft/:leagueId/pick', isAuthenticated, async (req, res) => {
         }
 
         // Add player to team
+        console.log(`Adding player ${playerId} to team ${team._id} (${team.teamName})`);
         await team.addPlayer(
             playerId,
             league.draftState.currentRound,
             league.draftState.currentPick
         );
+        console.log(`Player added successfully. Team roster count: ${team.activeRosterCount}`);
 
         // Record the pick in league history
         league.draftState.pickHistory.push({
@@ -255,20 +277,46 @@ router.post('/api/draft/:leagueId/pick', isAuthenticated, async (req, res) => {
             timestamp: new Date()
         });
 
-        // Advance to next pick
-        try {
-            await advanceToNextPick(league);
-        } catch (advanceError) {
-            console.error('Error advancing to next pick:', advanceError);
-            // Still save the current pick even if advancement fails
+        // Check if draft is complete after adding the pick
+        const totalParticipants = league.participants.filter(p => p.isActive).length;
+        const totalPicks = totalParticipants * league.maxPlayersPerTeam;
+        const currentPickCount = league.draftState.pickHistory.length;
+
+        console.log(`Draft completion check: ${currentPickCount}/${totalPicks} picks completed`);
+
+        if (currentPickCount >= totalPicks) {
+            console.log('Draft completed! Setting league to active status');
+            league.draftState.isActive = false;
+            league.status = 'active';
+            league.draftState.currentTurnUserID = null;
+            league.draftState.currentTurnStartTime = null;
+        } else {
+            // Advance to next pick only if draft is not complete
+            try {
+                await advanceToNextPick(league);
+            } catch (advanceError) {
+                console.error('Error advancing to next pick:', advanceError);
+                // Still save the current pick even if advancement fails
+            }
         }
 
-        await league.save();
+        try {
+            await league.save();
+            console.log(`League saved successfully. Status: ${league.status}, Draft Active: ${league.draftState.isActive}`);
+        } catch (saveError) {
+            console.error('Error saving league:', saveError);
+            throw saveError;
+        }
 
         // Get the drafted player info
         const draftedPlayer = await Player.findById(playerId);
 
         console.log(`Successfully drafted player ${playerId} for user ${userId}`);
+
+        // Calculate draft completion status manually for response
+        const isDraftCompleteForResponse = !league.draftState.isActive ||
+                                          (league.status === 'active') ||
+                                          (currentPickCount >= totalPicks);
 
         res.json({
             success: true,
@@ -283,7 +331,7 @@ router.post('/api/draft/:leagueId/pick', isAuthenticated, async (req, res) => {
                 currentRound: league.draftState.currentRound,
                 currentPick: league.draftState.currentPick,
                 currentTurnUserID: league.draftState.currentTurnUserID,
-                isDraftComplete: league.isDraftComplete
+                isDraftComplete: isDraftCompleteForResponse
             }
         });
     } catch (error) {
@@ -397,16 +445,8 @@ async function advanceToNextPick(league) {
             console.log(`Moving to next round: ${nextRound}`);
         }
 
-        // Check if draft is complete
-        if (nextRound > totalRounds) {
-            console.log('Draft completed! Setting league to active status');
-            league.draftState.isActive = false;
-            league.status = 'active';
-            league.draftState.currentTurnUserID = null;
-            league.draftState.currentRound = nextRound;
-            league.draftState.currentPick = nextPick;
-            return;
-        }
+        // Note: Draft completion is now checked before calling this function
+        // This function only handles advancing to the next pick
 
         // Validate draft order exists
         if (!league.draftState.draftOrder || league.draftState.draftOrder.length === 0) {
@@ -445,6 +485,7 @@ async function advanceToNextPick(league) {
         league.draftState.currentRound = nextRound;
         league.draftState.currentPick = nextPick;
         league.draftState.currentTurnUserID = nextUser;
+        league.draftState.currentTurnStartTime = new Date();
 
         console.log(`Next turn: R${nextRound} P${nextPick}, User: ${nextUser}`);
 

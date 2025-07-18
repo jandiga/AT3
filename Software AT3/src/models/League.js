@@ -81,6 +81,9 @@ const leagueSchema = new mongoose.Schema({
             type: mongoose.Schema.Types.ObjectId,
             ref: 'User'
         },
+        currentTurnStartTime: {
+            type: Date
+        },
         draftOrder: [{
             type: mongoose.Schema.Types.ObjectId,
             ref: 'User'
@@ -152,7 +155,11 @@ leagueSchema.virtual('availableSpots').get(function() {
 
 // Virtual for draft completion status
 leagueSchema.virtual('isDraftComplete').get(function() {
-    if (!this.draftState.isActive) return false;
+    // If draft is not active, it means it's either not started or completed
+    if (!this.draftState.isActive) {
+        // If status is 'active', it means draft was completed
+        return this.status === 'active';
+    }
     const totalPicks = this.participantCount * this.maxPlayersPerTeam;
     return this.draftState.pickHistory.length >= totalPicks;
 });

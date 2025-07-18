@@ -247,7 +247,14 @@ router.get('/api/leagues/:leagueId', isAuthenticated, async (req, res) => {
         const league = await League.findById(leagueId)
             .populate('createdByTeacherID', 'name')
             .populate('participants.userID', 'name email')
-            .populate('participants.teamID', 'teamName currentScores')
+            .populate({
+                path: 'participants.teamID',
+                select: 'teamName currentScores roster',
+                populate: {
+                    path: 'roster.playerID',
+                    select: 'name'
+                }
+            })
             .populate('draftPool', 'name academicHistory weeklyStudyContributions');
 
         if (!league) {
@@ -543,6 +550,7 @@ router.post('/api/leagues/:leagueId/start-draft', isAuthenticated, isTeacher, as
         league.draftState.currentRound = 1;
         league.draftState.currentPick = 1;
         league.draftState.currentTurnUserID = league.draftState.draftOrder[0];
+        league.draftState.currentTurnStartTime = new Date();
 
         await league.save();
 
@@ -553,6 +561,55 @@ router.post('/api/leagues/:leagueId/start-draft', isAuthenticated, isTeacher, as
         });
     } catch (error) {
         console.error('Error starting draft:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// End league (for teachers)
+router.post('/api/leagues/:leagueId/end', isAuthenticated, isTeacher, async (req, res) => {
+    try {
+        const { leagueId } = req.params;
+        const league = await League.findById(leagueId);
+
+        if (!league) {
+            return res.status(404).json({
+                success: false,
+                error: 'League not found'
+            });
+        }
+
+        // Check if user is the creator
+        if (league.createdByTeacherID.toString() !== req.session.user.id) {
+            return res.status(403).json({
+                success: false,
+                error: 'Only the league creator can end the league'
+            });
+        }
+
+        // Can only end active leagues
+        if (league.status !== 'active') {
+            return res.status(400).json({
+                success: false,
+                error: 'League must be active to be ended'
+            });
+        }
+
+        // Set league to completed
+        league.status = 'completed';
+        league.endDate = new Date();
+
+        await league.save();
+
+        res.json({
+            success: true,
+            message: 'League ended successfully',
+            league: league
+        });
+    } catch (error) {
+        console.error('Error ending league:', error);
         res.status(500).json({
             success: false,
             error: error.message

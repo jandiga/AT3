@@ -11,6 +11,7 @@ import playerRoutes from './src/routes/players.js';
 import leagueRoutes from './src/routes/leagues.js';
 import draftRoutes from './src/routes/draft.js';
 import { isAuthenticated, isTeacher } from './src/middleware/auth.js';
+import draftTimerService from './src/services/draftTimerService.js';
 
 // Configuration
 dotenv.config();
@@ -190,4 +191,7 @@ app.use((req, res) => {
 
 app.listen(port, () => {
     console.log(`Server running on port ${port}`);
-}); 
+
+    // Start the draft timer service
+    draftTimerService.start();
+});
