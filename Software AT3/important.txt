@@ -1,6 +1,6 @@
 TODO
     Home
-        Leagues
+        Leagues (DONE)
         Leaderboards
         FAQ (DONE)
         About (DONE)
@@ -8,13 +8,18 @@ TODO
     Admin
         updates player scores (DONE)
     User
-        team
-        Drafting
+        team (DONE)
+        Drafting (DONE)
         league (DONE)
         Fix profile-seperate from admin students & make sure cannot acces other player profiles (DONE)
     Player
         stats breakdown
         player stats page
+
+    Testing
+        Lighthouse on chrome
+
+
 
 
 

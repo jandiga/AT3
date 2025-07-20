@@ -389,9 +389,26 @@ router.post('/api/draft/:leagueId/auto-pick', isAuthenticated, async (req, res) 
         );
 
         if (availablePlayers.length === 0) {
-            return res.status(400).json({
-                success: false,
-                error: 'No players available for auto-pick'
+            // No players available - check if we should end the draft early
+            const totalParticipants = league.participants.filter(p => p.isActive).length;
+            const totalPossiblePicks = totalParticipants * league.maxPlayersPerTeam;
+            const currentPickCount = league.draftState.pickHistory.length;
+
+            console.log(`No players available for auto-pick. Current picks: ${currentPickCount}/${totalPossiblePicks}`);
+
+            // End the draft early since no more players are available
+            league.draftState.isActive = false;
+            league.draftState.isDraftComplete = true;
+            league.status = 'active';
+            league.draftState.currentTurnUserID = null;
+            league.draftState.currentTurnStartTime = null;
+
+            await league.save();
+
+            return res.json({
+                success: true,
+                message: 'Draft completed early - no more players available',
+                draftComplete: true
             });
         }
 

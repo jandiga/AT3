@@ -309,34 +309,60 @@ function updateTimer() {
         timerCard.style.display = 'block';
         autoPickBtn.style.display = 'block';
 
-        // Clear any existing timer and start fresh
-        if (turnTimer) {
-            clearInterval(turnTimer);
-            turnTimer = null;
-        }
+        // Calculate actual time remaining based on turn start time
+        const now = new Date();
+        const turnStartTime = new Date(draftData.draftState.currentTurnStartTime);
+        const elapsedSeconds = Math.floor((now.getTime() - turnStartTime.getTime()) / 1000);
+        const actualTimeRemaining = Math.max(0, draftData.draftSettings.timeLimitPerPick - elapsedSeconds);
 
-        // Reset timer display styling
-        timerDiv.classList.remove('timer-warning');
-
-        // Start new timer
-        timeRemaining = draftData.draftSettings.timeLimitPerPick;
-        turnTimer = setInterval(() => {
-            timeRemaining--;
-
-            const minutes = Math.floor(timeRemaining / 60);
-            const seconds = timeRemaining % 60;
-            timerDiv.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-
-            if (timeRemaining <= 10) {
-                timerDiv.classList.add('timer-warning');
-            }
-
-            if (timeRemaining <= 0) {
+        // Only restart timer if we don't have one running or if the calculated time is significantly different
+        if (!turnTimer || Math.abs(timeRemaining - actualTimeRemaining) > 2) {
+            // Clear any existing timer
+            if (turnTimer) {
                 clearInterval(turnTimer);
                 turnTimer = null;
-                makeAutoPick();
             }
-        }, 1000);
+
+            // Reset timer display styling
+            timerDiv.classList.remove('timer-warning');
+
+            // Set the correct time remaining
+            timeRemaining = actualTimeRemaining;
+
+            // If time has already expired, auto-pick immediately
+            if (timeRemaining <= 0) {
+                makeAutoPick();
+                return;
+            }
+
+            // Start new timer
+            turnTimer = setInterval(() => {
+                timeRemaining--;
+
+                const minutes = Math.floor(timeRemaining / 60);
+                const seconds = timeRemaining % 60;
+                timerDiv.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+
+                if (timeRemaining <= 10) {
+                    timerDiv.classList.add('timer-warning');
+                }
+
+                if (timeRemaining <= 0) {
+                    clearInterval(turnTimer);
+                    turnTimer = null;
+                    makeAutoPick();
+                }
+            }, 1000);
+        }
+
+        // Update display immediately with current time
+        const minutes = Math.floor(timeRemaining / 60);
+        const seconds = timeRemaining % 60;
+        timerDiv.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+
+        if (timeRemaining <= 10) {
+            timerDiv.classList.add('timer-warning');
+        }
     } else {
         timerCard.style.display = 'none';
         autoPickBtn.style.display = 'none';

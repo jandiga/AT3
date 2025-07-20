@@ -27,11 +27,23 @@ router.get('/teams/:teamId', isAuthenticated, async (req, res) => {
         // Check if user has access to view this team
         const isOwner = team.ownerID._id.toString() === req.session.user.id;
         const isTeacher = req.session.user.role === 'Teacher';
-        
-        if (!isOwner && !isTeacher) {
+
+        // Check if user is a participant in the same league
+        let isLeagueParticipant = false;
+        if (team.leagueID) {
+            const League = (await import('../models/League.js')).default;
+            const league = await League.findById(team.leagueID._id);
+            if (league) {
+                isLeagueParticipant = league.participants.some(p =>
+                    p.userID.toString() === req.session.user.id && p.isActive
+                );
+            }
+        }
+
+        if (!isOwner && !isTeacher && !isLeagueParticipant) {
             return res.status(403).render('error', {
                 user: req.session.user,
-                error: 'Access denied'
+                error: 'Access denied - you must be in the same league to view this team'
             });
         }
         
@@ -73,11 +85,23 @@ router.get('/api/teams/:teamId', isAuthenticated, async (req, res) => {
         // Check if user has access to view this team
         const isOwner = team.ownerID._id.toString() === req.session.user.id;
         const isTeacher = req.session.user.role === 'Teacher';
-        
-        if (!isOwner && !isTeacher) {
+
+        // Check if user is a participant in the same league
+        let isLeagueParticipant = false;
+        if (team.leagueID) {
+            const League = (await import('../models/League.js')).default;
+            const league = await League.findById(team.leagueID._id);
+            if (league) {
+                isLeagueParticipant = league.participants.some(p =>
+                    p.userID.toString() === req.session.user.id && p.isActive
+                );
+            }
+        }
+
+        if (!isOwner && !isTeacher && !isLeagueParticipant) {
             return res.status(403).json({
                 success: false,
-                error: 'Access denied'
+                error: 'Access denied - you must be in the same league to view this team'
             });
         }
         
@@ -89,6 +113,38 @@ router.get('/api/teams/:teamId', isAuthenticated, async (req, res) => {
         
     } catch (error) {
         console.error('Error fetching team details:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// API endpoint to get user's teams in active leagues
+router.get('/api/teams/user/active', isAuthenticated, async (req, res) => {
+    try {
+        const teams = await Team.find({
+            ownerID: req.session.user.id
+        })
+        .populate('leagueID', 'leagueName status')
+        .populate({
+            path: 'roster.playerID',
+            select: 'name academicScore effortScore totalScore'
+        })
+        .sort({ dateCreated: -1 }); // Newest first
+
+        // Filter to only include teams in active leagues
+        const activeTeams = teams.filter(team =>
+            team.leagueID && team.leagueID.status === 'active'
+        );
+
+        res.json({
+            success: true,
+            teams: activeTeams
+        });
+
+    } catch (error) {
+        console.error('Error fetching user teams:', error);
         res.status(500).json({
             success: false,
             error: error.message

@@ -2,6 +2,7 @@
 
 let leagueData = null;
 let selectedPlayerId = null;
+let countdownInterval = null;
 
 // Initialize page
 document.addEventListener('DOMContentLoaded', function() {
@@ -65,6 +66,9 @@ function updateLeagueDisplay() {
     if (leagueData.createdByTeacherID._id === currentUser.id) {
         document.getElementById('manage-tab-li').style.display = 'block';
     }
+
+    // Start countdown timer
+    startLeagueCountdown();
 }
 
 // Update league actions
@@ -221,32 +225,28 @@ function loadPlayersTab() {
         `;
         return;
     }
-    
-    const isCreator = leagueData.createdByTeacherID._id === currentUser.id;
-    
+
     const playersHtml = leagueData.draftPool.map(player => {
-        const academicScore = calculateAverageScore(player.academicHistory);
-        const effortScore = calculateTotalEffort(player.weeklyStudyContributions);
-        
+        // Use the same scoring logic as the dashboard (virtual properties)
+        const totalScore = player.totalScore || 0;
+        const academicScore = player.academicScore || 0;
+        const effortScore = player.effortScore || 0;
+
         return `
             <div class="card mb-2">
                 <div class="card-body">
                     <div class="row align-items-center">
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <h6 class="mb-1">${escapeHtml(player.name)}</h6>
                         </div>
                         <div class="col-md-3">
-                            <small class="text-muted">Academic: ${academicScore.toFixed(1)}%</small>
+                            <small class="text-muted">Total Score: <strong>${totalScore}</strong></small>
                         </div>
                         <div class="col-md-3">
-                            <small class="text-muted">Effort: ${effortScore.toFixed(1)} hrs</small>
+                            <small class="text-muted">Academic Score: <strong>${academicScore}</strong></small>
                         </div>
-                        <div class="col-md-2 text-end">
-                            ${isCreator ? `
-                                <button class="btn btn-sm btn-outline-primary" onclick="showUpdatePlayerModal('${player._id}', '${escapeHtml(player.name)}')">
-                                    <i class="bi bi-pencil"></i> Update
-                                </button>
-                            ` : ''}
+                        <div class="col-md-3">
+                            <small class="text-muted">Effort Score: <strong>${effortScore}</strong></small>
                         </div>
                     </div>
                 </div>
@@ -567,6 +567,59 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+// League countdown functionality
+function startLeagueCountdown() {
+    // Clear existing interval
+    if (countdownInterval) {
+        clearInterval(countdownInterval);
+    }
+
+    // Only show countdown for active leagues
+    if (!leagueData.endDate || leagueData.status !== 'active') {
+        document.getElementById('leagueCountdown').innerHTML =
+            '<div class="text-muted">League not active</div>';
+        return;
+    }
+
+    function updateCountdown() {
+        const now = new Date().getTime();
+        const endTime = new Date(leagueData.endDate).getTime();
+        const timeLeft = endTime - now;
+
+        if (timeLeft <= 0) {
+            // League has ended
+            document.getElementById('leagueCountdown').innerHTML =
+                '<div class="text-danger"><strong>League Ended</strong></div>';
+            clearInterval(countdownInterval);
+            return;
+        }
+
+        // Calculate time units
+        const days = Math.floor(timeLeft / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((timeLeft % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+
+        // Update display
+        document.getElementById('daysLeft').textContent = days;
+        document.getElementById('hoursLeft').textContent = hours;
+        document.getElementById('minutesLeft').textContent = minutes;
+
+        // Change color based on time remaining
+        const countdownDiv = document.getElementById('leagueCountdown');
+        if (days <= 1) {
+            countdownDiv.className = 'text-danger';
+        } else if (days <= 3) {
+            countdownDiv.className = 'text-warning';
+        } else {
+            countdownDiv.className = 'text-primary';
+        }
+    }
+
+    // Update immediately and then every minute
+    updateCountdown();
+    countdownInterval = setInterval(updateCountdown, 60000); // Update every minute
 }
 
 function showError(message) {

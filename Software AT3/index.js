@@ -142,11 +142,14 @@ app.get('/profile', async (req, res) => {
                 .populate('linkedTeams');
 
             if (fullUser && fullUser.linkedTeams && fullUser.linkedTeams.length > 0) {
-                // Get teams with populated rosters
+                // Get teams with populated rosters, sorted by newest first
                 const teams = await Team.find({
                     _id: { $in: fullUser.linkedTeams },
                     ownerID: req.session.user.id
-                }).populate('roster.playerID', 'name academicHistory weeklyStudyContributions');
+                })
+                .populate('roster.playerID', 'name academicHistory weeklyStudyContributions')
+                .populate('leagueID', 'leagueName status')
+                .sort({ dateCreated: -1 }); // Sort by newest first
 
                 data.teams = teams;
             }

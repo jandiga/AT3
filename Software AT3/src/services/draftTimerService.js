@@ -85,7 +85,17 @@ class DraftTimerService {
             });
 
             if (availablePlayers.length === 0) {
-                console.error(`No available players for auto-pick in league ${league._id}`);
+                console.log(`No available players for auto-pick in league ${league._id}. Ending draft early.`);
+
+                // End the draft early since no more players are available
+                league.draftState.isActive = false;
+                league.draftState.isDraftComplete = true;
+                league.status = 'active';
+                league.draftState.currentTurnUserID = null;
+                league.draftState.currentTurnStartTime = null;
+
+                await league.save();
+                console.log(`Draft completed early for league ${league._id} - no more players available`);
                 return;
             }
 
