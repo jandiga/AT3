@@ -1,0 +1,13 @@
+ALGORITHM AddPlayerToTeam
+BEGIN
+  INPUT team and player
+
+  IF player is already on a team THEN
+    SHOW error: "Player already assigned"
+    RETURN
+
+  ADD player to team list
+  UPDATE team’s total score and performance stats
+
+  SHOW confirmation
+END

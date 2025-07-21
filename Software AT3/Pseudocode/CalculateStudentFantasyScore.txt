@@ -1,0 +1,17 @@
+ALGORITHM CalculateStudentFantasyScore
+BEGIN
+  INPUT list of academic scores with dates (ordered chronologically)
+
+  SELECT last 5 academic scores
+  SET academicScore = AVERAGE of those scores
+
+  COMPUTE improvement as (latest score - earliest score)
+  SET effortScore = (improvement / 30) * 100
+
+  IF effortScore < 1 THEN
+    SET effortScore = 1
+
+  SET totalScore = academicScore + effortScore
+
+  RETURN academicScore, effortScore, totalScore
+END

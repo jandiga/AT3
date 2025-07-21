@@ -1,0 +1,15 @@
+ALGORITHM ConductLeagueDraft
+BEGIN
+  WHILE draft is not complete DO
+    FOR each team in draft order DO
+      IF time limit exceeded THEN
+        AUTO-PICK best available player
+      ELSE
+        ALLOW manager to pick a player
+
+      ASSIGN selected player to team
+      REMOVE player from draft pool
+
+  SET draft status to complete
+  NOTIFY all teams of final rosters
+END

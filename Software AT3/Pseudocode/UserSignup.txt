@@ -1,0 +1,16 @@
+ALGORITHM UserSignup
+BEGIN
+  DISPLAY signup form
+  GET user input: name, email, password, role, class code
+
+  IF email is invalid OR password is weak THEN
+    SHOW error message
+    RETURN
+
+  ASSIGN default permissions based on role
+
+  STORE user data securely in database
+  SEND confirmation email to user
+
+  SHOW success message
+END

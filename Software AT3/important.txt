@@ -1,7 +1,7 @@
 TODO
     Home
         Leagues (DONE)
-        Leaderboards
+        Leaderboards (DONE)
         FAQ (DONE)
         About (DONE)
         already used email address fix (DONE)

@@ -1,0 +1,11 @@
+ALGORITHM CreateLeagueDraft
+BEGIN
+  GET league settings: max participants, draft type, time per pick
+
+  INITIALIZE new league with provided settings
+  GENERATE draft order for all participants
+  PREPARE player draft pool
+
+  NOTIFY participants of upcoming draft session
+  SET draft status to "not started"
+END
