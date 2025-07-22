@@ -1,134 +1,265 @@
-// League detail page JavaScript
+/**
+ * League Detail Page JavaScript
+ * Handles detailed league view, team management, player statistics, and league administration
+ */
 
-let leagueData = null;
-let selectedPlayerId = null;
-let countdownInterval = null;
+// Global state variables for league detail management
+let currentLeagueData = null;           // Stores complete league information
+let currentlySelectedPlayerId = null;   // ID of player selected for updates
+let leagueCountdownTimer = null;        // Timer interval for league countdown
 
-// Initialize page
+/**
+ * Initialize league detail page when DOM is loaded
+ * Sets up event listeners and loads initial league data
+ */
 document.addEventListener('DOMContentLoaded', function() {
+    // Validate that league ID is available (should be set by server-side template)
     if (!leagueId) {
-        showError('League ID not found');
+        showErrorMessage('League ID not found');
         return;
     }
-    
-    loadLeagueDetails();
-    
-    // Set up event listeners
-    document.getElementById('updatePlayerForm')?.addEventListener('submit', handleUpdatePlayer);
-    
-    // Tab change listeners
-    document.getElementById('players-tab')?.addEventListener('shown.bs.tab', loadPlayersTab);
-    document.getElementById('standings-tab')?.addEventListener('shown.bs.tab', loadStandingsTab);
-    document.getElementById('manage-tab')?.addEventListener('shown.bs.tab', loadManageTab);
+
+    // Load initial league data
+    loadCompleteLeagueDetails();
+
+    // Set up form event listeners
+    const playerUpdateForm = document.getElementById('updatePlayerForm');
+    playerUpdateForm?.addEventListener('submit', handleUpdatePlayer);
+
+    // Set up tab navigation event listeners
+    const playersTab = document.getElementById('players-tab');
+    const standingsTab = document.getElementById('standings-tab');
+    const managementTab = document.getElementById('manage-tab');
+
+    playersTab?.addEventListener('shown.bs.tab', loadPlayersTab);
+    standingsTab?.addEventListener('shown.bs.tab', loadStandingsTab);
+    managementTab?.addEventListener('shown.bs.tab', loadManageTab);
 });
 
-// Load league details
-async function loadLeagueDetails() {
+/**
+ * Loads complete league details from the API
+ * Fetches league information, participants, and settings
+ */
+async function loadCompleteLeagueDetails() {
     try {
-        const response = await fetch(`/api/leagues/${leagueId}`);
-        const data = await response.json();
-        
-        if (data.success) {
-            leagueData = data.league;
+        // Request league details from API
+        const leagueDetailsResponse = await fetch(`/api/leagues/${leagueId}`);
+        const leagueDetailsData = await leagueDetailsResponse.json();
+
+        if (leagueDetailsData.success) {
+            currentLeagueData = leagueDetailsData.league;
             updateLeagueDisplay();
-            loadTeamsTab(); // Load teams by default
+            loadTeamsTab(); // Load teams tab by default
         } else {
-            showError('Failed to load league details: ' + data.error);
+            showErrorMessage('Failed to load league details: ' + leagueDetailsData.error);
         }
-    } catch (error) {
-        console.error('Error loading league details:', error);
-        showError('Failed to load league details');
+    } catch (networkError) {
+        console.error('Error loading league details:', networkError);
+        showErrorMessage('Failed to load league details: ' + networkError.message);
     }
 }
 
-// Update league display
+/**
+ * Updates all league display elements with current league data
+ * Refreshes basic info, status, statistics, and action buttons
+ */
 function updateLeagueDisplay() {
-    // Update basic info
-    document.getElementById('leagueName').textContent = leagueData.leagueName;
-    document.getElementById('leagueDescription').textContent = leagueData.description || 'No description provided';
-    
-    // Update status
-    const statusBadge = document.getElementById('leagueStatus');
-    statusBadge.textContent = getStatusText(leagueData.status);
-    statusBadge.className = `badge bg-${getStatusColor(leagueData.status)}`;
-    
-    // Update stats
-    document.getElementById('participantCount').textContent = 
-        `${leagueData.participants.length}/${leagueData.maxParticipants}`;
-    document.getElementById('playersPerTeam').textContent = leagueData.maxPlayersPerTeam;
-    document.getElementById('draftType').textContent = 
-        leagueData.draftSettings.draftType === 'snake' ? 'Snake Draft' : 'Linear Draft';
-    
-    // Update actions
+    // Update basic league information
+    document.getElementById('leagueName').textContent = currentLeagueData.leagueName;
+    document.getElementById('leagueDescription').textContent =
+        currentLeagueData.description || 'No description provided';
+
+    // Update league status badge
+    const leagueStatusBadge = document.getElementById('leagueStatus');
+    leagueStatusBadge.textContent = getStatusText(currentLeagueData.status);
+    leagueStatusBadge.className = `badge bg-${getStatusColor(currentLeagueData.status)}`;
+
+    // Update league statistics
+    const participantCountElement = document.getElementById('participantCount');
+    participantCountElement.textContent =
+        `${currentLeagueData.participants.length}/${currentLeagueData.maxParticipants}`;
+
+    const playersPerTeamElement = document.getElementById('playersPerTeam');
+    playersPerTeamElement.textContent = currentLeagueData.maxPlayersPerTeam;
+
+    const draftTypeElement = document.getElementById('draftType');
+    draftTypeElement.textContent =
+        currentLeagueData.draftSettings.draftType === 'snake' ? 'Snake Draft' : 'Linear Draft';
+
+    // Update available actions based on user permissions
     updateLeagueActions();
-    
-    // Show manage tab if user is creator
-    if (leagueData.createdByTeacherID._id === currentUser.id) {
-        document.getElementById('manage-tab-li').style.display = 'block';
+
+    // Update status message
+    updateStatusMessage();
+
+    // Show management tab if current user is the league creator
+    if (currentUser && currentLeagueData.createdByTeacherID._id === currentUser.id) {
+        const manageTabElement = document.getElementById('manage-tab-li');
+        if (manageTabElement) {
+            manageTabElement.style.display = 'block';
+        }
     }
 
-    // Start countdown timer
+    // Initialize league countdown timer
     startLeagueCountdown();
 }
 
-// Update league actions
+/**
+ * Updates the league action buttons based on user permissions and league status
+ * Shows appropriate actions like join, start draft, end league, etc.
+ */
 function updateLeagueActions() {
-    const actionsDiv = document.getElementById('leagueActions');
-    let actions = '';
-    
-    const isCreator = leagueData.createdByTeacherID._id === currentUser.id;
-    const isParticipant = leagueData.participants.some(p =>
-        p.userID._id === currentUser.id && p.isActive
+    const leagueActionsContainer = document.getElementById('leagueActions');
+    let actionButtonsHtml = '';
+
+    // If user is not authenticated, don't show any action buttons
+    if (!currentUser) {
+        leagueActionsContainer.innerHTML = '';
+        return;
+    }
+
+    // Determine user's relationship to the league
+    const isLeagueCreator = currentLeagueData.createdByTeacherID._id === currentUser.id;
+    const isActiveParticipant = currentLeagueData.participants.some(participant =>
+        participant.userID._id === currentUser.id && participant.isActive
     );
-    
-    if (leagueData.status === 'open' && !isParticipant && currentUser.role === 'Student') {
-        actions += `
+
+    // Show join button for students who haven't joined an open league
+    if (currentLeagueData.status === 'open' && !isActiveParticipant && currentUser.role === 'Student') {
+        actionButtonsHtml += `
             <button class="btn btn-success" onclick="joinLeague()">
                 <i class="bi bi-plus-circle"></i> Join League
             </button>
         `;
     }
-    
-    if (leagueData.status === 'drafting') {
-        actions += `
+
+    // Show draft button for leagues currently in drafting phase
+    if (currentLeagueData.status === 'drafting') {
+        actionButtonsHtml += `
             <button class="btn btn-warning" onclick="goToDraft()">
                 <i class="bi bi-play-circle"></i> Join Draft
             </button>
         `;
     }
-    
-    if (isCreator && leagueData.status === 'setup') {
-        actions += `
+
+    // Show open league button for creators of leagues in setup phase
+    if (isLeagueCreator && currentLeagueData.status === 'setup') {
+        actionButtonsHtml += `
             <button class="btn btn-success" onclick="openLeague()">
                 <i class="bi bi-unlock"></i> Open League
             </button>
         `;
     }
-    
-    if (isCreator && leagueData.status === 'open' && leagueData.participants.length >= 2) {
-        actions += `
+
+    // Show start draft button for creators of open leagues with enough participants
+    if (isLeagueCreator && currentLeagueData.status === 'open' &&
+        currentLeagueData.participants.length >= 2) {
+        actionButtonsHtml += `
             <button class="btn btn-warning" onclick="startDraft()">
                 <i class="bi bi-play-circle"></i> Start Draft
             </button>
         `;
     }
 
-    if (isCreator && leagueData.status === 'active') {
-        actions += `
+    // Show end league button for creators of active leagues
+    if (isLeagueCreator && currentLeagueData.status === 'active') {
+        actionButtonsHtml += `
             <button class="btn btn-danger" onclick="endLeague()">
                 <i class="bi bi-stop-circle"></i> End League
             </button>
         `;
     }
 
-    actionsDiv.innerHTML = actions;
+
+
+    // Update the actions container with generated buttons
+    leagueActionsContainer.innerHTML = actionButtonsHtml;
+}
+
+/**
+ * Updates the status message to provide helpful information about next steps
+ */
+function updateStatusMessage() {
+    const statusMessageDiv = document.getElementById('leagueStatusMessage');
+    const statusMessageText = document.getElementById('statusMessageText');
+
+    if (!statusMessageDiv || !statusMessageText || !currentLeagueData) {
+        return;
+    }
+
+    let message = '';
+    let alertClass = 'alert-info';
+    let showMessage = false;
+
+    const isLeagueCreator = currentUser && currentLeagueData.createdByTeacherID._id === currentUser.id;
+    const participantCount = currentLeagueData.participants.length;
+    const maxParticipants = currentLeagueData.maxParticipants;
+
+    switch (currentLeagueData.status) {
+        case 'setup':
+            if (isLeagueCreator) {
+                message = `League is in setup mode. Click "Open League" to allow students to join. (${participantCount}/${maxParticipants} participants)`;
+                alertClass = 'alert-warning';
+                showMessage = true;
+            }
+            break;
+
+        case 'open':
+            if (isLeagueCreator) {
+                if (participantCount < 2) {
+                    message = `League is open for participants. Need at least 2 participants to start draft. Currently: ${participantCount}/${maxParticipants}`;
+                    alertClass = 'alert-info';
+                    showMessage = true;
+                } else {
+                    message = `League is ready! ${participantCount} participants joined. You can now start the draft.`;
+                    alertClass = 'alert-success';
+                    showMessage = true;
+                }
+            } else if (currentUser && currentUser.role === 'Student') {
+                const isParticipant = currentLeagueData.participants.some(p =>
+                    p.userID._id === currentUser.id && p.isActive
+                );
+                if (!isParticipant) {
+                    message = `League is open for joining! ${participantCount}/${maxParticipants} spots filled.`;
+                    alertClass = 'alert-success';
+                    showMessage = true;
+                }
+            }
+            break;
+
+        case 'drafting':
+            message = 'Draft is in progress. Click "Join Draft" to participate.';
+            alertClass = 'alert-primary';
+            showMessage = true;
+            break;
+
+        case 'active':
+            message = 'League is active and running!';
+            alertClass = 'alert-success';
+            showMessage = true;
+            break;
+
+        case 'completed':
+            message = 'League has ended.';
+            alertClass = 'alert-secondary';
+            showMessage = true;
+            break;
+    }
+
+    if (showMessage) {
+        statusMessageText.textContent = message;
+        statusMessageDiv.className = `alert ${alertClass}`;
+        statusMessageDiv.style.display = 'block';
+    } else {
+        statusMessageDiv.style.display = 'none';
+    }
 }
 
 // Load teams tab
 function loadTeamsTab() {
     const teamsDiv = document.getElementById('teamsContent');
 
-    if (!leagueData.participants || leagueData.participants.length === 0) {
+    if (!currentLeagueData.participants || currentLeagueData.participants.length === 0) {
         teamsDiv.innerHTML = `
             <div class="alert alert-info">
                 <i class="bi bi-info-circle"></i> No teams have joined this league yet.
@@ -138,7 +269,7 @@ function loadTeamsTab() {
     }
 
     // Sort teams by total score (descending)
-    const sortedTeams = [...leagueData.participants].sort((a, b) => {
+    const sortedTeams = [...currentLeagueData.participants].sort((a, b) => {
         const scoreA = a.teamID?.currentScores?.totalScore || 0;
         const scoreB = b.teamID?.currentScores?.totalScore || 0;
         return scoreB - scoreA;
@@ -162,7 +293,7 @@ function loadTeamsTab() {
                 <tbody>
                     ${sortedTeams.map((participant, index) => {
                         const team = participant.teamID;
-                        const isMyTeam = participant.userID._id === currentUser.id;
+                        const isMyTeam = currentUser && participant.userID._id === currentUser.id;
                         const scores = team?.currentScores || {};
                         const playerCount = team?.roster?.filter(r => r.isActive).length || 0;
 
@@ -182,7 +313,7 @@ function loadTeamsTab() {
                                 <td>${escapeHtml(participant.userID.name)}</td>
                                 <td>
                                     <span class="badge bg-info">
-                                        ${playerCount}/${leagueData.maxPlayersPerTeam}
+                                        ${playerCount}/${currentLeagueData.maxPlayersPerTeam}
                                     </span>
                                 </td>
                                 <td><strong>${(scores.totalScore || 0).toFixed(1)}</strong></td>
@@ -209,15 +340,15 @@ function viewTeamDetails(teamId) {
     if (teamId && teamId !== 'undefined') {
         window.open(`/teams/${teamId}`, '_blank');
     } else {
-        showError('Team details not available');
+        showErrorMessage('Team details not available');
     }
 }
 
 // Load players tab
 function loadPlayersTab() {
     const playersDiv = document.getElementById('playersContent');
-    
-    if (!leagueData.draftPool || leagueData.draftPool.length === 0) {
+
+    if (!currentLeagueData.draftPool || currentLeagueData.draftPool.length === 0) {
         playersDiv.innerHTML = `
             <div class="alert alert-info">
                 <i class="bi bi-info-circle"></i> No players available in this league.
@@ -226,7 +357,7 @@ function loadPlayersTab() {
         return;
     }
 
-    const playersHtml = leagueData.draftPool.map(player => {
+    const playersHtml = currentLeagueData.draftPool.map(player => {
         // Use the same scoring logic as the dashboard (virtual properties)
         const totalScore = player.totalScore || 0;
         const academicScore = player.academicScore || 0;
@@ -260,8 +391,8 @@ function loadPlayersTab() {
 // Load standings tab
 function loadStandingsTab() {
     const standingsDiv = document.getElementById('standingsContent');
-    
-    if (!leagueData.participants || leagueData.participants.length === 0) {
+
+    if (!currentLeagueData.participants || currentLeagueData.participants.length === 0) {
         standingsDiv.innerHTML = `
             <div class="alert alert-info">
                 <i class="bi bi-info-circle"></i> No standings available yet.
@@ -269,9 +400,9 @@ function loadStandingsTab() {
         `;
         return;
     }
-    
+
     // Sort teams by total score (if available)
-    const sortedTeams = [...leagueData.participants].sort((a, b) => {
+    const sortedTeams = [...currentLeagueData.participants].sort((a, b) => {
         const scoreA = a.teamID?.currentScores?.totalScore || 0;
         const scoreB = b.teamID?.currentScores?.totalScore || 0;
         return scoreB - scoreA;
@@ -326,11 +457,11 @@ function loadManageTab() {
                         <h6 class="mb-0">League Settings</h6>
                     </div>
                     <div class="card-body">
-                        <p><strong>Status:</strong> ${getStatusText(leagueData.status)}</p>
-                        <p><strong>Participants:</strong> ${leagueData.participants.length}/${leagueData.maxParticipants}</p>
-                        <p><strong>Draft Type:</strong> ${leagueData.draftSettings.draftType}</p>
-                        <p><strong>Time per Pick:</strong> ${leagueData.draftSettings.timeLimitPerPick}s</p>
-                        <p><strong>Created:</strong> ${new Date(leagueData.dateCreated).toLocaleDateString()}</p>
+                        <p><strong>Status:</strong> ${getStatusText(currentLeagueData.status)}</p>
+                        <p><strong>Participants:</strong> ${currentLeagueData.participants.length}/${currentLeagueData.maxParticipants}</p>
+                        <p><strong>Draft Type:</strong> ${currentLeagueData.draftSettings.draftType}</p>
+                        <p><strong>Time per Pick:</strong> ${currentLeagueData.draftSettings.timeLimitPerPick}s</p>
+                        <p><strong>Created:</strong> ${new Date(currentLeagueData.dateCreated).toLocaleDateString()}</p>
                     </div>
                 </div>
             </div>
@@ -341,12 +472,12 @@ function loadManageTab() {
                     </div>
                     <div class="card-body">
                         <div class="d-grid gap-2">
-                            ${leagueData.status === 'setup' ? `
+                            ${currentLeagueData.status === 'setup' ? `
                                 <button class="btn btn-success" onclick="openLeague()">
                                     <i class="bi bi-unlock"></i> Open League for Participants
                                 </button>
                             ` : ''}
-                            ${leagueData.status === 'open' && leagueData.participants.length >= 2 ? `
+                            ${currentLeagueData.status === 'open' && currentLeagueData.participants.length >= 2 ? `
                                 <button class="btn btn-warning" onclick="startDraft()">
                                     <i class="bi bi-play-circle"></i> Start Draft
                                 </button>
@@ -399,7 +530,7 @@ async function handleUpdatePlayer(event) {
 
     // Check if at least one field is being updated
     if (Object.keys(data).length === 0) {
-        showError('Please enter at least one value to update');
+        showErrorMessage('Please enter at least one value to update');
         return;
     }
 
@@ -415,15 +546,15 @@ async function handleUpdatePlayer(event) {
         const result = await response.json();
 
         if (result.success) {
-            showSuccess('Player updated successfully!');
+            showSuccessMessage('Player updated successfully!');
             bootstrap.Modal.getInstance(document.getElementById('updatePlayerModal')).hide();
-            loadLeagueDetails(); // Refresh data
+            loadCompleteLeagueDetails(); // Refresh data
         } else {
-            showError('Failed to update player: ' + result.error);
+            showErrorMessage('Failed to update player: ' + result.error);
         }
     } catch (error) {
         console.error('Error updating player:', error);
-        showError('Failed to update player');
+        showErrorMessage('Failed to update player');
     }
 }
 
@@ -443,14 +574,14 @@ async function joinLeague() {
             const result = await response.json();
 
             if (result.success) {
-                showSuccess('Successfully joined league!');
-                loadLeagueDetails(); // Refresh the page data
+                showSuccessMessage('Successfully joined league!');
+                loadCompleteLeagueDetails(); // Refresh the page data
             } else {
-                showError('Failed to join league: ' + result.error);
+                showErrorMessage('Failed to join league: ' + result.error);
             }
         } catch (error) {
             console.error('Error joining league:', error);
-            showError('Failed to join league');
+            showErrorMessage('Failed to join league');
         }
     }
 }
@@ -469,14 +600,14 @@ async function openLeague() {
             const result = await response.json();
             
             if (result.success) {
-                showSuccess('League opened successfully!');
-                loadLeagueDetails();
+                showSuccessMessage('League opened successfully!');
+                loadCompleteLeagueDetails();
             } else {
-                showError('Failed to open league: ' + result.error);
+                showErrorMessage('Failed to open league: ' + result.error);
             }
         } catch (error) {
             console.error('Error opening league:', error);
-            showError('Failed to open league');
+            showErrorMessage('Failed to open league');
         }
     }
 }
@@ -491,14 +622,14 @@ async function startDraft() {
             const result = await response.json();
 
             if (result.success) {
-                showSuccess('Draft started successfully!');
+                showSuccessMessage('Draft started successfully!');
                 window.location.href = `/draft/${leagueId}`;
             } else {
-                showError('Failed to start draft: ' + result.error);
+                showErrorMessage('Failed to start draft: ' + result.error);
             }
         } catch (error) {
             console.error('Error starting draft:', error);
-            showError('Failed to start draft');
+            showErrorMessage('Failed to start draft');
         }
     }
 }
@@ -513,21 +644,23 @@ async function endLeague() {
             const result = await response.json();
 
             if (result.success) {
-                showSuccess('League ended successfully!');
-                loadLeagueDetails(); // Refresh the page data
+                showSuccessMessage('League ended successfully!');
+                loadCompleteLeagueDetails(); // Refresh the page data
             } else {
-                showError('Failed to end league: ' + result.error);
+                showErrorMessage('Failed to end league: ' + result.error);
             }
         } catch (error) {
             console.error('Error ending league:', error);
-            showError('Failed to end league');
+            showErrorMessage('Failed to end league');
         }
     }
 }
 
 function refreshLeague() {
-    loadLeagueDetails();
+    loadCompleteLeagueDetails();
 }
+
+
 
 // Utility functions
 function getStatusColor(status) {
@@ -572,12 +705,12 @@ function escapeHtml(text) {
 // League countdown functionality
 function startLeagueCountdown() {
     // Clear existing interval
-    if (countdownInterval) {
-        clearInterval(countdownInterval);
+    if (leagueCountdownTimer) {
+        clearInterval(leagueCountdownTimer);
     }
 
     // Only show countdown for active leagues
-    if (!leagueData.endDate || leagueData.status !== 'active') {
+    if (!currentLeagueData.endDate || currentLeagueData.status !== 'active') {
         document.getElementById('leagueCountdown').innerHTML =
             '<div class="text-muted">League not active</div>';
         return;
@@ -585,14 +718,14 @@ function startLeagueCountdown() {
 
     function updateCountdown() {
         const now = new Date().getTime();
-        const endTime = new Date(leagueData.endDate).getTime();
+        const endTime = new Date(currentLeagueData.endDate).getTime();
         const timeLeft = endTime - now;
 
         if (timeLeft <= 0) {
             // League has ended
             document.getElementById('leagueCountdown').innerHTML =
                 '<div class="text-danger"><strong>League Ended</strong></div>';
-            clearInterval(countdownInterval);
+            clearInterval(leagueCountdownTimer);
             return;
         }
 
@@ -619,13 +752,83 @@ function startLeagueCountdown() {
 
     // Update immediately and then every minute
     updateCountdown();
-    countdownInterval = setInterval(updateCountdown, 60000); // Update every minute
+    leagueCountdownTimer = setInterval(updateCountdown, 60000); // Update every minute
 }
 
-function showError(message) {
-    alert(message); // Could be enhanced with toast notifications
+/**
+ * Displays an error message to the user
+ * @param {string} errorMessage - Error message to display
+ */
+function showErrorMessage(errorMessage) {
+    // Create error alert element
+    const errorAlert = document.createElement('div');
+    errorAlert.className = 'alert alert-danger alert-dismissible fade show position-fixed';
+    errorAlert.style.top = '20px';
+    errorAlert.style.right = '20px';
+    errorAlert.style.zIndex = '9999';
+    errorAlert.innerHTML = `
+        <i class="bi bi-exclamation-triangle"></i> ${errorMessage}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+
+    document.body.appendChild(errorAlert);
+
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        if (errorAlert.parentNode) {
+            errorAlert.remove();
+        }
+    }, 5000);
 }
 
-function showSuccess(message) {
-    alert(message); // Could be enhanced with toast notifications
+/**
+ * Displays a success message to the user
+ * @param {string} successMessage - Success message to display
+ */
+function showSuccessMessage(successMessage) {
+    // Create success alert element
+    const successAlert = document.createElement('div');
+    successAlert.className = 'alert alert-success alert-dismissible fade show position-fixed';
+    successAlert.style.top = '20px';
+    successAlert.style.right = '20px';
+    successAlert.style.zIndex = '9999';
+    successAlert.innerHTML = `
+        <i class="bi bi-check-circle"></i> ${successMessage}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+
+    document.body.appendChild(successAlert);
+
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        if (successAlert.parentNode) {
+            successAlert.remove();
+        }
+    }, 5000);
+}
+
+/**
+ * Displays a success message to the user
+ * @param {string} successMessage - Success message to display
+ */
+function showSuccessMessage(successMessage) {
+    // Create success alert element
+    const successAlert = document.createElement('div');
+    successAlert.className = 'alert alert-success alert-dismissible fade show position-fixed';
+    successAlert.style.top = '20px';
+    successAlert.style.right = '20px';
+    successAlert.style.zIndex = '9999';
+    successAlert.innerHTML = `
+        <i class="bi bi-check-circle"></i> ${successMessage}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+
+    document.body.appendChild(successAlert);
+
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        if (successAlert.parentNode) {
+            successAlert.remove();
+        }
+    }, 5000);
 }

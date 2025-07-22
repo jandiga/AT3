@@ -76,6 +76,32 @@
         </div>
     </div>
 
+    <!-- League Status Message -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div id="leagueStatusMessage" class="alert alert-info" style="display: none;">
+                <i class="bi bi-info-circle"></i>
+                <span id="statusMessageText">Loading status...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Login Prompt for Non-Authenticated Users -->
+    <% if (!user) { %>
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="alert alert-info">
+                <i class="bi bi-info-circle"></i>
+                <strong>Want to join this league?</strong>
+                <a href="/login" class="btn btn-primary btn-sm ms-2">Login</a>
+                <span class="mx-2">or</span>
+                <a href="/sign-up" class="btn btn-outline-primary btn-sm">Sign Up</a>
+                to participate in fantasy academic leagues!
+            </div>
+        </div>
+    </div>
+    <% } %>
+
     <!-- Action Buttons -->
     <div class="row mb-4">
         <div class="col-md-12">
@@ -216,7 +242,7 @@
 // Pass data from server
 const leagueId = '<%= leagueId %>';
 const currentUser = <%- JSON.stringify(user) %>;
-window.currentUserId = '<%= user.id %>';
+window.currentUserId = '<%= user ? user.id : null %>';
 </script>
 <script src="/js/league-detail.js"></script>
 

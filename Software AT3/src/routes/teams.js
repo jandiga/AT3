@@ -1,46 +1,54 @@
 import express from 'express';
-import { isAuthenticated } from '../middleware/auth.js';
+import { isAuthenticated, optionalAuthenticationAPI } from '../middleware/auth.js';
 import Team from '../models/Team.js';
 
 const router = express.Router();
 
-// Get team details page
-router.get('/teams/:teamId', isAuthenticated, async (req, res) => {
+// Get team details page - allows public access for teams in public leagues
+router.get('/teams/:teamId', async (req, res) => {
     try {
         const { teamId } = req.params;
-        
+
         const team = await Team.findById(teamId)
             .populate('ownerID', 'name email')
-            .populate('leagueID', 'leagueName status')
+            .populate('leagueID', 'leagueName status isPublic')
             .populate({
                 path: 'roster.playerID',
                 select: 'name academicHistory weeklyStudyContributions'
             });
-        
+
         if (!team) {
             return res.status(404).render('error', {
                 user: req.session.user,
                 error: 'Team not found'
             });
         }
-        
-        // Check if user has access to view this team
-        const isOwner = team.ownerID._id.toString() === req.session.user.id;
-        const isTeacher = req.session.user.role === 'Teacher';
 
-        // Check if user is a participant in the same league
+        // Check if user has access to view this team
+        let isOwner = false;
+        let isTeacher = false;
         let isLeagueParticipant = false;
-        if (team.leagueID) {
-            const League = (await import('../models/League.js')).default;
-            const league = await League.findById(team.leagueID._id);
-            if (league) {
-                isLeagueParticipant = league.participants.some(p =>
-                    p.userID.toString() === req.session.user.id && p.isActive
-                );
+
+        if (req.session.user) {
+            isOwner = team.ownerID._id.toString() === req.session.user.id;
+            isTeacher = req.session.user.role === 'Teacher';
+
+            // Check if user is a participant in the same league
+            if (team.leagueID) {
+                const League = (await import('../models/League.js')).default;
+                const league = await League.findById(team.leagueID._id);
+                if (league) {
+                    isLeagueParticipant = league.participants.some(p =>
+                        p.userID.toString() === req.session.user.id && p.isActive
+                    );
+                }
             }
         }
 
-        if (!isOwner && !isTeacher && !isLeagueParticipant) {
+        // Check access permissions
+        const isPublicLeague = team.leagueID && team.leagueID.isPublic;
+
+        if (!isPublicLeague && !isOwner && !isTeacher && !isLeagueParticipant) {
             return res.status(403).render('error', {
                 user: req.session.user,
                 error: 'Access denied - you must be in the same league to view this team'
@@ -62,8 +70,8 @@ router.get('/teams/:teamId', isAuthenticated, async (req, res) => {
     }
 });
 
-// API endpoint to get team details
-router.get('/api/teams/:teamId', isAuthenticated, async (req, res) => {
+// API endpoint to get team details - allows public access for teams in public leagues
+router.get('/api/teams/:teamId', optionalAuthenticationAPI, async (req, res) => {
     try {
         const { teamId } = req.params;
         

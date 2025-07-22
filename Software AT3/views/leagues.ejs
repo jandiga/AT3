@@ -10,6 +10,22 @@
         <% } %>
     </div>
 
+    <!-- Login Prompt for Non-Authenticated Users -->
+    <% if (!user) { %>
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="alert alert-info">
+                <i class="bi bi-info-circle"></i>
+                <strong>Join the Fantasy Academic League!</strong>
+                <a href="/login" class="btn btn-primary btn-sm ms-2">Login</a>
+                <span class="mx-2">or</span>
+                <a href="/sign-up" class="btn btn-outline-primary btn-sm">Sign Up</a>
+                to create teams, join leagues, and compete with your classmates!
+            </div>
+        </div>
+    </div>
+    <% } %>
+
     <!-- League Tabs -->
     <ul class="nav nav-tabs" id="leagueTabs" role="tablist">
         <li class="nav-item" role="presentation">
@@ -118,6 +134,8 @@
                             <div class="mb-3">
                                 <label for="leagueName" class="form-label">League Name *</label>
                                 <input type="text" class="form-control" id="leagueName" name="leagueName" required>
+                                <div id="leagueNameFeedback" class="invalid-feedback"></div>
+                                <div class="form-text">League names must be unique within each class.</div>
                             </div>
                         </div>
                         <div class="col-md-6">

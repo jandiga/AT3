@@ -1,80 +1,110 @@
-// League management JavaScript
+/**
+ * League Management JavaScript
+ * Handles league browsing, creation, joining, and management functionality
+ */
 
-let currentLeagues = [];
-let selectedLeagueId = null;
+// Global state variables for league management
+let allAvailableLeagues = [];           // Stores all leagues fetched from API
+let currentlySelectedLeagueId = null;   // ID of league selected for joining
 
-// Initialize page
+/**
+ * Initialize league management page when DOM is loaded
+ * Sets up event listeners and loads initial data
+ */
 document.addEventListener('DOMContentLoaded', function() {
-    loadLeagues();
-    
-    // Set up event listeners
-    document.getElementById('statusFilter')?.addEventListener('change', loadLeagues);
-    
-    // Tab change listeners
-    document.getElementById('my-leagues-tab')?.addEventListener('shown.bs.tab', loadMyLeagues);
-    document.getElementById('manage-tab')?.addEventListener('shown.bs.tab', loadManageLeagues);
-    
-    // Form submissions
-    document.getElementById('createLeagueForm')?.addEventListener('submit', handleCreateLeague);
-    document.getElementById('joinLeagueForm')?.addEventListener('submit', handleJoinLeague);
+    // Load initial league data
+    loadAllAvailableLeagues();
+
+    // Set up filter and navigation event listeners
+    const statusFilterSelect = document.getElementById('statusFilter');
+    const myLeaguesTab = document.getElementById('my-leagues-tab');
+    const manageLeaguesTab = document.getElementById('manage-tab');
+    const createLeagueForm = document.getElementById('createLeagueForm');
+    const joinLeagueForm = document.getElementById('joinLeagueForm');
+
+    // Add event listeners with null checks for safety
+    statusFilterSelect?.addEventListener('change', loadAllAvailableLeagues);
+    myLeaguesTab?.addEventListener('shown.bs.tab', loadUserParticipatingLeagues);
+    manageLeaguesTab?.addEventListener('shown.bs.tab', loadUserManagedLeagues);
+    createLeagueForm?.addEventListener('submit', handleCreateLeague);
+    joinLeagueForm?.addEventListener('submit', handleJoinLeague);
+
+    // Set up real-time league name validation
+    setupLeagueNameValidation();
 });
 
-// Load all available leagues
-async function loadLeagues() {
+/**
+ * Loads all available leagues with optional status filtering
+ * Fetches leagues from API and displays them in the browse tab
+ */
+async function loadAllAvailableLeagues() {
     try {
-        const statusFilter = document.getElementById('statusFilter')?.value || '';
-        const url = `/api/leagues${statusFilter ? `?status=${statusFilter}` : ''}`;
-        
-        const response = await fetch(url);
-        const data = await response.json();
-        
-        if (data.success) {
-            currentLeagues = data.leagues;
-            displayLeagues(data.leagues, 'leaguesList');
+        // Get current status filter value
+        const statusFilterValue = document.getElementById('statusFilter')?.value || '';
+        const apiEndpointUrl = `/api/leagues${statusFilterValue ? `?status=${statusFilterValue}` : ''}`;
+
+        // Fetch leagues from API
+        const leaguesResponse = await fetch(apiEndpointUrl);
+        const leaguesData = await leaguesResponse.json();
+
+        if (leaguesData.success) {
+            allAvailableLeagues = leaguesData.leagues;
+            displayLeagues(leaguesData.leagues, 'leaguesList');
         } else {
-            showError('Failed to load leagues: ' + data.error);
+            showErrorMessage('Failed to load leagues: ' + leaguesData.error);
         }
-    } catch (error) {
-        console.error('Error loading leagues:', error);
-        showError('Failed to load leagues');
+    } catch (networkError) {
+        console.error('Error loading leagues:', networkError);
+        showErrorMessage('Failed to load leagues');
     }
 }
 
-// Load user's leagues
-async function loadMyLeagues() {
+/**
+ * Loads leagues where the current user is a participant
+ * Filters and displays only leagues the user has joined
+ */
+async function loadUserParticipatingLeagues() {
     try {
-        const response = await fetch('/api/leagues');
-        const data = await response.json();
-        
-        if (data.success) {
-            // Filter leagues where user is a participant
-            const myLeagues = data.leagues.filter(league => 
-                league.participants.some(p => p.userID._id === getCurrentUserId())
-            );
-            displayMyLeagues(myLeagues, 'myLeaguesList');
+        // Fetch all leagues to filter for user participation
+        const allLeaguesResponse = await fetch('/api/leagues');
+        const allLeaguesData = await allLeaguesResponse.json();
+
+        if (allLeaguesData.success) {
+            // Filter leagues where current user is a participant
+            const currentUserId = getCurrentUserId();
+            const userParticipatingLeagues = currentUserId ? allLeaguesData.leagues.filter(league =>
+                league.participants.some(participant =>
+                    participant.userID._id === currentUserId
+                )
+            ) : [];
+            displayMyLeagues(userParticipatingLeagues, 'myLeaguesList');
         } else {
-            showError('Failed to load your leagues: ' + data.error);
+            showErrorMessage('Failed to load your leagues: ' + allLeaguesData.error);
         }
-    } catch (error) {
-        console.error('Error loading my leagues:', error);
-        showError('Failed to load your leagues');
+    } catch (networkError) {
+        console.error('Error loading user participating leagues:', networkError);
+        showErrorMessage('Failed to load your leagues');
     }
 }
 
-// Load leagues for management (teachers only)
-async function loadManageLeagues() {
+/**
+ * Loads leagues that the current user manages (teachers only)
+ * Fetches leagues created by the current user for management
+ */
+async function loadUserManagedLeagues() {
     try {
-        const response = await fetch('/api/leagues/my-leagues');
-        const data = await response.json();
-        
-        if (data.success) {
-            displayManageLeagues(data.leagues, 'manageLeaguesList');
+        // Fetch leagues managed by current user
+        const managedLeaguesResponse = await fetch('/api/leagues/my-leagues');
+        const managedLeaguesData = await managedLeaguesResponse.json();
+
+        if (managedLeaguesData.success) {
+            displayManageLeagues(managedLeaguesData.leagues, 'manageLeaguesList');
         } else {
-            showError('Failed to load leagues for management: ' + data.error);
+            showErrorMessage('Failed to load leagues for management: ' + managedLeaguesData.error);
         }
-    } catch (error) {
-        console.error('Error loading manage leagues:', error);
-        showError('Failed to load leagues for management');
+    } catch (networkError) {
+        console.error('Error loading user managed leagues:', networkError);
+        showErrorMessage('Failed to load leagues for management');
     }
 }
 
@@ -360,19 +390,67 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+/**
+ * Gets the current user's ID from the global window object
+ * This should be set by the server-side template
+ * @returns {string|null} Current user ID or null if not set
+ */
 function getCurrentUserId() {
-    // This would need to be set from the server-side template
-    return window.currentUserId || null;
+    // Access currentUserId from window object (set by server-side template)
+    // Handle case where user is not logged in
+    return window['currentUserId'] || null;
 }
 
-function showError(message) {
-    // Simple error display - could be enhanced with toast notifications
-    alert(message);
+/**
+ * Displays an error message to the user
+ * @param {string} errorMessage - Error message to display
+ */
+function showErrorMessage(errorMessage) {
+    // Create error alert element
+    const errorAlert = document.createElement('div');
+    errorAlert.className = 'alert alert-danger alert-dismissible fade show position-fixed';
+    errorAlert.style.top = '20px';
+    errorAlert.style.right = '20px';
+    errorAlert.style.zIndex = '9999';
+    errorAlert.innerHTML = `
+        <i class="bi bi-exclamation-triangle"></i> ${errorMessage}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+
+    document.body.appendChild(errorAlert);
+
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        if (errorAlert.parentNode) {
+            errorAlert.remove();
+        }
+    }, 5000);
 }
 
-function showSuccess(message) {
-    // Simple success display - could be enhanced with toast notifications
-    alert(message);
+/**
+ * Displays a success message to the user
+ * @param {string} successMessage - Success message to display
+ */
+function showSuccessMessage(successMessage) {
+    // Create success alert element
+    const successAlert = document.createElement('div');
+    successAlert.className = 'alert alert-success alert-dismissible fade show position-fixed';
+    successAlert.style.top = '20px';
+    successAlert.style.right = '20px';
+    successAlert.style.zIndex = '9999';
+    successAlert.innerHTML = `
+        <i class="bi bi-check-circle"></i> ${successMessage}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+
+    document.body.appendChild(successAlert);
+
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        if (successAlert.parentNode) {
+            successAlert.remove();
+        }
+    }, 5000);
 }
 
 // Placeholder functions for actions (to be implemented)
@@ -404,15 +482,15 @@ async function leaveLeague(leagueId) {
             const result = await response.json();
 
             if (result.success) {
-                showSuccess('Successfully left league!');
-                loadLeagues();
-                loadMyLeagues();
+                showSuccessMessage('Successfully left league!');
+                loadAllAvailableLeagues();
+                loadUserParticipatingLeagues();
             } else {
-                showError('Failed to leave league: ' + result.error);
+                showErrorMessage('Failed to leave league: ' + result.error);
             }
         } catch (error) {
             console.error('Error leaving league:', error);
-            showError('Failed to leave league');
+            showErrorMessage('Failed to leave league');
         }
     }
 }
@@ -427,14 +505,14 @@ async function openLeague(leagueId) {
             const result = await response.json();
 
             if (result.success) {
-                showSuccess('League opened successfully!');
-                loadManageLeagues();
+                showSuccessMessage('League opened successfully!');
+                loadUserManagedLeagues();
             } else {
-                showError('Failed to open league: ' + result.error);
+                showErrorMessage('Failed to open league: ' + result.error);
             }
         } catch (error) {
             console.error('Error opening league:', error);
-            showError('Failed to open league');
+            showErrorMessage('Failed to open league');
         }
     }
 }
@@ -449,14 +527,14 @@ async function endLeague(leagueId) {
             const result = await response.json();
 
             if (result.success) {
-                showSuccess('League ended successfully!');
-                loadManageLeagues();
+                showSuccessMessage('League ended successfully!');
+                loadUserManagedLeagues();
             } else {
-                showError('Failed to end league: ' + result.error);
+                showErrorMessage('Failed to end league: ' + result.error);
             }
         } catch (error) {
             console.error('Error ending league:', error);
-            showError('Failed to end league');
+            showErrorMessage('Failed to end league');
         }
     }
 }
@@ -471,14 +549,14 @@ async function startDraft(leagueId) {
             const result = await response.json();
 
             if (result.success) {
-                showSuccess('Draft started successfully!');
+                showSuccessMessage('Draft started successfully!');
                 window.location.href = `/draft/${leagueId}`;
             } else {
-                showError('Failed to start draft: ' + result.error);
+                showErrorMessage('Failed to start draft: ' + result.error);
             }
         } catch (error) {
             console.error('Error starting draft:', error);
-            showError('Failed to start draft');
+            showErrorMessage('Failed to start draft');
         }
     }
 }
@@ -487,13 +565,105 @@ function manageLeague(leagueId) {
     window.location.href = `/leagues/${leagueId}/manage`;
 }
 
+/**
+ * Sets up real-time validation for league name input
+ */
+function setupLeagueNameValidation() {
+    const leagueNameInput = document.getElementById('leagueName');
+    const classCodeInput = document.getElementById('classCode');
+    const feedbackDiv = document.getElementById('leagueNameFeedback');
+
+    if (!leagueNameInput || !classCodeInput || !feedbackDiv) return;
+
+    let validationTimeout;
+
+    // Debounced validation function
+    const validateLeagueName = async () => {
+        const leagueName = leagueNameInput.value.trim();
+        const classCode = classCodeInput.value.trim();
+
+        if (!leagueName || !classCode) {
+            leagueNameInput.classList.remove('is-invalid', 'is-valid');
+            feedbackDiv.textContent = '';
+            return;
+        }
+
+        try {
+            const nameExists = await checkLeagueNameExists(leagueName, classCode);
+
+            if (nameExists) {
+                leagueNameInput.classList.add('is-invalid');
+                leagueNameInput.classList.remove('is-valid');
+                feedbackDiv.textContent = `A league named "${leagueName}" already exists in class ${classCode}.`;
+            } else {
+                leagueNameInput.classList.add('is-valid');
+                leagueNameInput.classList.remove('is-invalid');
+                feedbackDiv.textContent = '';
+            }
+        } catch (error) {
+            console.error('Error validating league name:', error);
+        }
+    };
+
+    // Add event listeners with debouncing
+    const handleInput = () => {
+        clearTimeout(validationTimeout);
+        validationTimeout = setTimeout(validateLeagueName, 500); // 500ms delay
+    };
+
+    leagueNameInput.addEventListener('input', handleInput);
+    classCodeInput.addEventListener('input', handleInput);
+}
+
+/**
+ * Checks if a league name already exists for the current user and class code
+ * @param {string} leagueName - Name to check
+ * @param {string} classCode - Class code to check within
+ * @returns {boolean} True if name exists, false otherwise
+ */
+async function checkLeagueNameExists(leagueName, classCode) {
+    try {
+        // Get all leagues for the current user
+        const response = await fetch('/api/leagues/my-leagues');
+        const data = await response.json();
+
+        if (data.success) {
+            // Check if any league has the same name (case-insensitive) and class code
+            return data.leagues.some(league =>
+                league.leagueName.toLowerCase() === leagueName.toLowerCase() &&
+                league.classCode === classCode
+            );
+        }
+        return false;
+    } catch (error) {
+        console.error('Error checking league name:', error);
+        return false;
+    }
+}
+
 // Handle create league form submission
 async function handleCreateLeague(event) {
     event.preventDefault();
-    
+
     const formData = new FormData(event.target);
     const data = Object.fromEntries(formData.entries());
-    
+
+    // Check if form has validation errors
+    const leagueNameInput = document.getElementById('leagueName');
+    if (leagueNameInput && leagueNameInput.classList.contains('is-invalid')) {
+        showErrorMessage('Please fix the validation errors before submitting.');
+        return;
+    }
+
+    // Client-side validation for duplicate league names
+    if (data.leagueName && data.classCode) {
+        const nameExists = await checkLeagueNameExists(data.leagueName, data.classCode);
+        if (nameExists) {
+            showErrorMessage(`A league named "${data.leagueName}" already exists in class ${data.classCode}. Please choose a different name.`);
+            return;
+        }
+    }
+
     try {
         const response = await fetch('/api/leagues/create', {
             method: 'POST',
@@ -502,21 +672,21 @@ async function handleCreateLeague(event) {
             },
             body: JSON.stringify(data)
         });
-        
+
         const result = await response.json();
         
         if (result.success) {
-            showSuccess('League created successfully!');
+            showSuccessMessage('League created successfully!');
             bootstrap.Modal.getInstance(document.getElementById('createLeagueModal')).hide();
             event.target.reset();
-            loadLeagues();
-            loadManageLeagues();
+            loadAllAvailableLeagues();
+            loadUserManagedLeagues();
         } else {
-            showError('Failed to create league: ' + result.error);
+            showErrorMessage('Failed to create league: ' + result.error);
         }
     } catch (error) {
         console.error('Error creating league:', error);
-        showError('Failed to create league');
+        showErrorMessage('Failed to create league');
     }
 }
 
@@ -539,16 +709,16 @@ async function handleJoinLeague(event) {
         const result = await response.json();
         
         if (result.success) {
-            showSuccess('Successfully joined league!');
+            showSuccessMessage('Successfully joined league!');
             bootstrap.Modal.getInstance(document.getElementById('joinLeagueModal')).hide();
             event.target.reset();
-            loadLeagues();
-            loadMyLeagues();
+            loadAllAvailableLeagues();
+            loadUserParticipatingLeagues();
         } else {
-            showError('Failed to join league: ' + result.error);
+            showErrorMessage('Failed to join league: ' + result.error);
         }
     } catch (error) {
         console.error('Error joining league:', error);
-        showError('Failed to join league');
+        showErrorMessage('Failed to join league');
     }
 }

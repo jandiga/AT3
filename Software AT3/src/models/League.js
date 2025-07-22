@@ -242,5 +242,21 @@ leagueSchema.methods.startDraft = function() {
     this.draftState.currentTurnUserID = this.draftState.draftOrder[0];
 };
 
+// Create compound index for efficient league name uniqueness checks
+leagueSchema.index({
+    leagueName: 1,
+    classCode: 1,
+    createdByTeacherID: 1
+}, {
+    name: 'league_name_uniqueness_index',
+    collation: { locale: 'en', strength: 2 } // Case-insensitive collation
+});
+
+// Create index for efficient league queries by status and class
+leagueSchema.index({ status: 1, classCode: 1 });
+
+// Create index for efficient participant queries
+leagueSchema.index({ 'participants.userID': 1, 'participants.isActive': 1 });
+
 const League = mongoose.model('League', leagueSchema);
 export default League;

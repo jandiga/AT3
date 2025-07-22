@@ -51,18 +51,23 @@ router.get('/api/draft/:leagueId/status', isAuthenticated, async (req, res) => {
             });
         }
 
-        console.log(`League found: ${league.leagueName}, Status: ${league.status}, Draft Active: ${league.draftState.isActive}`);
-
         // Check if user is a participant
         const isParticipant = league.participants.some(p =>
             p.userID && p.userID._id && p.userID._id.toString() === req.session.user.id && p.isActive
         );
 
         if (!isParticipant) {
-            console.log(`User ${req.session.user.id} is not a participant in league ${leagueId}`);
             return res.status(403).json({
                 success: false,
                 error: 'You are not a participant in this league'
+            });
+        }
+
+        // Check if league is in a valid state for drafting
+        if (!['drafting', 'active'].includes(league.status)) {
+            return res.status(400).json({
+                success: false,
+                error: `League is not in drafting mode. Current status: ${league.status}`
             });
         }
 

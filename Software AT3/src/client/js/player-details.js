@@ -1,42 +1,78 @@
+/**
+ * Player Details Form Handler
+ * Manages player creation form submission and user feedback
+ */
+
 document.addEventListener('DOMContentLoaded', function() {
-    const playerForm = document.getElementById('playerForm');
-    const alertMessage = document.getElementById('alertMessage');
+    // Get references to form elements
+    const playerCreationForm = document.getElementById('playerForm');
+    const alertMessageContainer = document.getElementById('alertMessage');
 
-    playerForm.addEventListener('submit', async function(e) {
-        e.preventDefault();
+    // Validate that required elements exist
+    if (!playerCreationForm) {
+        console.error('Player form not found on page');
+        return;
+    }
 
-        const formData = new FormData(playerForm);
-        const data = Object.fromEntries(formData.entries());
+    /**
+     * Handles player creation form submission
+     * Prevents default form submission and sends data via API
+     */
+    playerCreationForm.addEventListener('submit', async function(formSubmissionEvent) {
+        // Prevent default form submission behavior
+        formSubmissionEvent.preventDefault();
+
+        // Extract form data and convert to object
+        const playerFormData = new FormData(playerCreationForm);
+        const playerDataObject = Object.fromEntries(playerFormData.entries());
 
         try {
-            const response = await fetch('/api/players/create', {
+            // Send player creation request to API
+            const playerCreationResponse = await fetch('/api/players/create', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify(data)
+                body: JSON.stringify(playerDataObject)
             });
 
-            const result = await response.json();
+            const creationResult = await playerCreationResponse.json();
 
-            if (result.success) {
-                showAlert('Player created successfully!', 'success');
-                playerForm.reset();
+            // Handle API response
+            if (creationResult.success) {
+                displayUserAlert('Player created successfully!', 'success');
+                playerCreationForm.reset(); // Clear form after successful creation
             } else {
-                showAlert(result.error || 'Failed to create player', 'danger');
+                const errorMessage = creationResult.error || 'Failed to create player';
+                displayUserAlert(errorMessage, 'danger');
             }
-        } catch (error) {
-            showAlert('An error occurred while creating the player', 'danger');
+        } catch (networkError) {
+            console.error('Network error during player creation:', networkError);
+            displayUserAlert('An error occurred while creating the player', 'danger');
         }
     });
 
-    function showAlert(message, type) {
-        alertMessage.textContent = message;
-        alertMessage.className = `alert alert-${type} mt-3`;
-        alertMessage.style.display = 'block';
+    /**
+     * Displays an alert message to the user
+     * @param {string} alertMessage - Message to display
+     * @param {string} alertType - Bootstrap alert type (success, danger, warning, info)
+     */
+    function displayUserAlert(alertMessage, alertType) {
+        // Validate alert container exists
+        if (!alertMessageContainer) {
+            console.error('Alert message container not found');
+            return;
+        }
 
+        // Set alert content and styling
+        alertMessageContainer.textContent = alertMessage;
+        alertMessageContainer.className = `alert alert-${alertType} mt-3`;
+        alertMessageContainer.style.display = 'block';
+
+        // Auto-hide alert after 5 seconds for better UX
+        const alertDisplayDuration = 5000;
         setTimeout(() => {
-            alertMessage.style.display = 'none';
-        }, 5000);
+            alertMessageContainer.style.display = 'none';
+        }, alertDisplayDuration);
     }
 });

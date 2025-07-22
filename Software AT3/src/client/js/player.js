@@ -63,27 +63,53 @@ class Player {
         }
         return gradeInput;
     }
-    score(grades) {
-        // Calculate the score of a player relative to the newest grade
-        if (grades.length < 2) {
+    /**
+     * Calculate the fantasy score of a player based on their academic grades
+     * @param {number[]} academicGrades - Array of grades sorted chronologically
+     * @returns {number} Calculated fantasy score
+     */
+    calculatePlayerScore(academicGrades) {
+        // Validate input data
+        if (!academicGrades || academicGrades.length < 2) {
             return 0;
         }
-        let improvementScore = this.improvementOverTime(grades, 1);
+
+        const improvementScore = this.calculateImprovementOverTime(academicGrades, 1);
         let consistencyBonus = 0;
 
-        // Calculate consistency bonus
-        if (grades.length >= 3) {
-            last_three = grades.slice(-3);
-            if (last_three.every(g => g >= 85)) {
-                consistencyBonus = 5;
-            } else if (last_three.every(g => g >= 70)) {
-                consistencyBonus = 3;
+        // Calculate consistency bonus for recent performance
+        if (academicGrades.length >= 3) {
+            const lastThreeGrades = academicGrades.slice(-3);
+            if (lastThreeGrades.every(grade => grade >= 85)) {
+                consistencyBonus = 5; // High performance bonus
+            } else if (lastThreeGrades.every(grade => grade >= 70)) {
+                consistencyBonus = 3; // Good performance bonus
             }
         }
 
+        return improvementScore + consistencyBonus;
     }
-    improvementOverTime(grades, weeks) {
-        return grades(grades.length)/grades(grades.length - weeks);
+
+    /**
+     * Calculate improvement score over a specified time period
+     * @param {number[]} academicGrades - Array of grades sorted chronologically
+     * @param {number} numberOfWeeks - Number of weeks to look back for comparison
+     * @returns {number} Improvement ratio
+     */
+    calculateImprovementOverTime(academicGrades, numberOfWeeks) {
+        if (academicGrades.length < numberOfWeeks + 1) {
+            return 0;
+        }
+
+        const currentGrade = academicGrades[academicGrades.length - 1];
+        const previousGrade = academicGrades[academicGrades.length - 1 - numberOfWeeks];
+
+        // Avoid division by zero
+        if (previousGrade === 0) {
+            return currentGrade > 0 ? 1 : 0;
+        }
+
+        return currentGrade / previousGrade;
     }
 }
 

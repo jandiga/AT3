@@ -1,5 +1,5 @@
 import express from 'express';
-import { isAuthenticated, isTeacher } from '../middleware/auth.js';
+import { isAuthenticated, isTeacher, optionalAuthenticationAPI } from '../middleware/auth.js';
 import League from '../models/League.js';
 import Player from '../models/Player.js';
 import Team from '../models/Team.js';
@@ -7,35 +7,41 @@ import User from '../models/User.js';
 
 const router = express.Router();
 
-// Get all leagues (for browsing)
-router.get('/api/leagues', isAuthenticated, async (req, res) => {
+// Get all leagues (for browsing) - allows public access
+router.get('/api/leagues', optionalAuthenticationAPI, async (req, res) => {
     try {
         const { status, classCode } = req.query;
         let query = {};
-        
+
         // Filter by status if provided
         if (status) {
             query.status = status;
         }
-        
+
         // Filter by classCode if provided
         if (classCode) {
             query.classCode = classCode;
         }
-        
-        // If user is a student, only show public leagues or leagues they're in
-        if (req.session.user.role === 'Student') {
-            query.$or = [
-                { isPublic: true },
-                { 'participants.userID': req.session.user.id }
-            ];
+
+        // If user is authenticated and is a student, show public leagues or leagues they're in
+        if (req.session.user) {
+            if (req.session.user.role === 'Student') {
+                query.$or = [
+                    { isPublic: true },
+                    { 'participants.userID': req.session.user.id }
+                ];
+            }
+            // Teachers can see all leagues they have access to
+        } else {
+            // Non-authenticated users can only see public leagues
+            query.isPublic = true;
         }
-        
+
         const leagues = await League.find(query)
             .populate('createdByTeacherID', 'name')
             .populate('participants.userID', 'name')
             .sort({ dateCreated: -1 });
-        
+
         res.json({
             success: true,
             leagues: leagues
@@ -93,6 +99,20 @@ router.post('/api/leagues/create', isAuthenticated, isTeacher, async (req, res) 
             return res.status(400).json({
                 success: false,
                 error: 'League name and class code are required'
+            });
+        }
+
+        // Check for duplicate league names within the same class code
+        const existingLeague = await League.findOne({
+            leagueName: { $regex: new RegExp(`^${leagueName.trim()}$`, 'i') }, // Case-insensitive match
+            classCode: classCode,
+            createdByTeacherID: req.session.user.id
+        });
+
+        if (existingLeague) {
+            return res.status(400).json({
+                success: false,
+                error: `A league named "${leagueName}" already exists in class ${classCode}. Please choose a different name.`
             });
         }
 
@@ -171,6 +191,23 @@ router.put('/api/leagues/:leagueId', isAuthenticated, isTeacher, async (req, res
             });
         }
 
+        // Check for duplicate league name if name is being updated
+        if (req.body.leagueName && req.body.leagueName.trim() !== league.leagueName) {
+            const existingLeague = await League.findOne({
+                leagueName: { $regex: new RegExp(`^${req.body.leagueName.trim()}$`, 'i') },
+                classCode: league.classCode,
+                createdByTeacherID: req.session.user.id,
+                _id: { $ne: league._id } // Exclude current league
+            });
+
+            if (existingLeague) {
+                return res.status(400).json({
+                    success: false,
+                    error: `A league named "${req.body.leagueName}" already exists in class ${league.classCode}. Please choose a different name.`
+                });
+            }
+        }
+
         const allowedUpdates = [
             'leagueName', 'description', 'maxParticipants', 'maxPlayersPerTeam',
             'isPublic', 'draftSettings'
@@ -206,9 +243,11 @@ router.put('/api/leagues/:leagueId', isAuthenticated, isTeacher, async (req, res
 router.post('/api/leagues/:leagueId/open', isAuthenticated, isTeacher, async (req, res) => {
     try {
         const { leagueId } = req.params;
+
         const league = await League.findById(leagueId);
 
         if (!league) {
+            console.log(`League ${leagueId} not found`);
             return res.status(404).json({
                 success: false,
                 error: 'League not found'
@@ -226,7 +265,7 @@ router.post('/api/leagues/:leagueId/open', isAuthenticated, isTeacher, async (re
         if (league.status !== 'setup') {
             return res.status(400).json({
                 success: false,
-                error: 'League can only be opened from setup status'
+                error: `League can only be opened from setup status. Current status: ${league.status}`
             });
         }
 
@@ -247,10 +286,11 @@ router.post('/api/leagues/:leagueId/open', isAuthenticated, isTeacher, async (re
     }
 });
 
-// Get league details
-router.get('/api/leagues/:leagueId', isAuthenticated, async (req, res) => {
+// Get league details - allows public access for public leagues
+router.get('/api/leagues/:leagueId', optionalAuthenticationAPI, async (req, res) => {
     try {
         const { leagueId } = req.params;
+
         const league = await League.findById(leagueId)
             .populate('createdByTeacherID', 'name')
             .populate('participants.userID', 'name email')
@@ -271,12 +311,18 @@ router.get('/api/leagues/:leagueId', isAuthenticated, async (req, res) => {
             });
         }
 
-        // Check if user has access to this league
-        const isCreator = league.createdByTeacherID._id.toString() === req.session.user.id;
-        const isParticipant = league.participants.some(p => 
-            p.userID._id.toString() === req.session.user.id
-        );
+        // Determine user permissions
+        let isCreator = false;
+        let isParticipant = false;
 
+        if (req.session.user) {
+            isCreator = league.createdByTeacherID._id.toString() === req.session.user.id;
+            isParticipant = league.participants.some(p =>
+                p.userID._id.toString() === req.session.user.id
+            );
+        }
+
+        // Check access permissions
         if (!league.isPublic && !isCreator && !isParticipant) {
             return res.status(403).json({
                 success: false,
@@ -284,14 +330,38 @@ router.get('/api/leagues/:leagueId', isAuthenticated, async (req, res) => {
             });
         }
 
-        res.json({
+        // For non-authenticated users viewing public leagues, limit the data returned
+        let responseData = {
             success: true,
             league: league,
             userRole: {
                 isCreator,
-                isParticipant
+                isParticipant,
+                isAuthenticated: !!req.session.user
             }
-        });
+        };
+
+        // If user is not authenticated, remove sensitive information
+        if (!req.session.user) {
+            // Remove email addresses from participants for non-authenticated users
+            responseData.league.participants = league.participants.map(p => ({
+                ...p.toObject(),
+                userID: {
+                    _id: p.userID._id,
+                    name: p.userID.name
+                    // Remove email for privacy
+                }
+            }));
+
+            // Remove detailed player information for non-authenticated users
+            responseData.league.draftPool = league.draftPool.map(player => ({
+                _id: player._id,
+                name: player.name
+                // Remove academic history and study contributions for privacy
+            }));
+        }
+
+        res.json(responseData);
     } catch (error) {
         console.error('Error fetching league details:', error);
         res.status(500).json({
@@ -512,10 +582,11 @@ router.post('/api/leagues/:leagueId/leave', isAuthenticated, async (req, res) =>
 router.post('/api/leagues/:leagueId/start-draft', isAuthenticated, isTeacher, async (req, res) => {
     try {
         const { leagueId } = req.params;
+
         const league = await League.findById(leagueId);
 
         if (!league) {
-            return res.status(404).json({
+                return res.status(404).json({
                 success: false,
                 error: 'League not found'
             });
@@ -533,15 +604,16 @@ router.post('/api/leagues/:leagueId/start-draft', isAuthenticated, isTeacher, as
         if (league.status !== 'open') {
             return res.status(400).json({
                 success: false,
-                error: 'League must be open to start draft'
+                error: `League must be open to start draft. Current status: ${league.status}`
             });
         }
 
         const activeParticipants = league.participants.filter(p => p.isActive);
+
         if (activeParticipants.length < 2) {
             return res.status(400).json({
                 success: false,
-                error: 'Need at least 2 participants to start draft'
+                error: `Need at least 2 participants to start draft. Current participants: ${activeParticipants.length}`
             });
         }
 

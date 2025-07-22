@@ -1,63 +1,120 @@
-// Draft functionality JavaScript
+/**
+ * Draft functionality JavaScript
+ * Handles real-time draft interface, player selection, timer management, and status updates
+ */
 
-let draftData = null;
-let selectedPlayerId = null;
-let turnTimer = null;
-let timeRemaining = 0;
-let isDrafting = false; // Flag to prevent duplicate draft requests
-let statusPollingInterval = null; // Store the polling interval ID
+// Global state variables for draft management
+let currentDraftData = null;                    // Stores complete draft state and available players
+let currentlySelectedPlayerId = null;           // ID of player currently selected for drafting
+let turnTimer = null;                           // Timer interval for current turn countdown
+let timeRemaining = 0;                          // Seconds remaining in current turn
+let isDraftRequestInProgress = false;           // Prevents duplicate draft API calls
+let draftStatusPollingInterval = null;          // Interval ID for periodic status updates
 
-// Initialize draft page
+/**
+ * Initialize draft page functionality when DOM is loaded
+ * Sets up event listeners and starts status polling
+ */
 document.addEventListener('DOMContentLoaded', function() {
+    // Validate that league ID is available (should be set by server-side template)
     if (!leagueId) {
         showError('League ID not found');
         return;
     }
-    
+
+    if (!currentUserId) {
+        showError('User not authenticated');
+        return;
+    }
+
+    // Load initial draft status and data
     loadDraftStatus();
-    
-    // Set up event listeners
-    document.getElementById('playerSearch')?.addEventListener('input', filterPlayers);
-    document.getElementById('sortPlayers')?.addEventListener('change', sortPlayers);
-    document.getElementById('autoPickBtn')?.addEventListener('click', makeAutoPick);
-    document.getElementById('draftPlayerBtn')?.addEventListener('click', draftSelectedPlayer);
-    
-    // Refresh draft status every 5 seconds
-    statusPollingInterval = setInterval(loadDraftStatus, 5000);
+
+    // Set up user interaction event listeners
+    const playerSearchInput = document.getElementById('playerSearch');
+    const playerSortSelect = document.getElementById('sortPlayers');
+    const autoPickButton = document.getElementById('autoPickBtn');
+    const draftPlayerButton = document.getElementById('draftPlayerBtn');
+
+    // Add event listeners with null checks for safety
+    playerSearchInput?.addEventListener('input', filterAvailablePlayers);
+    playerSortSelect?.addEventListener('change', sortAvailablePlayers);
+    autoPickButton?.addEventListener('click', executeAutoPick);
+    draftPlayerButton?.addEventListener('click', draftCurrentlySelectedPlayer);
+
+    // Start periodic status polling (every 5 seconds)
+    const statusPollingIntervalMs = 5000;
+    draftStatusPollingInterval = setInterval(loadDraftStatus, statusPollingIntervalMs);
 });
 
-// Load current draft status
+/**
+ * Fetches current draft status from the API and updates the interface
+ * Handles draft completion detection and stops polling when appropriate
+ */
 async function loadDraftStatus() {
     try {
-        const response = await fetch(`/api/draft/${leagueId}/status`);
-        const data = await response.json();
+        // Request current draft status from the API
+        const draftStatusResponse = await fetch(`/api/draft/${leagueId}/status`);
 
-        if (data.success) {
-            draftData = data;
-            updateDraftDisplay();
+        if (!draftStatusResponse.ok) {
+            throw new Error(`HTTP ${draftStatusResponse.status}: ${draftStatusResponse.statusText}`);
+        }
 
-            // Stop polling if draft is complete
-            if (draftData.draftState.isDraftComplete) {
+        const draftStatusData = await draftStatusResponse.json();
+        console.log('Draft status data:', draftStatusData);
+
+        // Process successful API response
+        if (draftStatusData.success) {
+            currentDraftData = draftStatusData;
+            updateAllDraftDisplayElements();
+
+            // Stop status polling if draft has completed
+            if (currentDraftData.draftState.isDraftComplete) {
                 console.log('Draft is complete, stopping status polling');
-                if (statusPollingInterval) {
-                    clearInterval(statusPollingInterval);
-                    statusPollingInterval = null;
+                if (draftStatusPollingInterval) {
+                    clearInterval(draftStatusPollingInterval);
+                    draftStatusPollingInterval = null;
                 }
             }
         } else {
-            console.error('Draft status error:', data.error);
-            showError('Failed to load draft status: ' + data.error);
+            console.error('Draft status error:', draftStatusData.error);
+            showError('Failed to load draft status: ' + draftStatusData.error);
+
+            // Show specific guidance based on error type
+            if (draftStatusData.error.includes('not a participant')) {
+                showError('You are not a participant in this league. Please join the league first.');
+            } else if (draftStatusData.error.includes('not in drafting mode')) {
+                showError('This league is not currently in draft mode. The draft may not have started yet or may have already completed.');
+            }
         }
-    } catch (error) {
-        console.error('Error loading draft status:', error);
-        showError('Failed to load draft status');
+    } catch (errorObject) {
+        console.error('Error loading draft status:', errorObject);
+
+        if (errorObject.message.includes('HTTP 403')) {
+            showError('Access denied: You may not be a participant in this league.');
+        } else if (errorObject.message.includes('HTTP 404')) {
+            showError('League not found. Please check the league ID.');
+        } else if (errorObject.message.includes('HTTP 400')) {
+            showError('League is not in draft mode. The draft may not have started yet.');
+        } else {
+            showError('Failed to load draft status: ' + errorObject.message);
+        }
     }
 }
 
-// Update all draft display elements
-function updateDraftDisplay() {
-    updateDraftStatus();
-    updateDraftOrder();
+/**
+ * Orchestrates updates to all draft interface elements
+ * Called after receiving new draft status data from the API
+ */
+function updateAllDraftDisplayElements() {
+    // Safety check to ensure we have draft data
+    if (!currentDraftData) {
+        console.error('Cannot update draft display: currentDraftData is null');
+        return;
+    }
+
+    updateDraftStatusPanel();
+    updateDraftOrderDisplay();
     updateCurrentPickInfo();
     updateAvailablePlayers();
     updateTeamsRosters();
@@ -65,75 +122,99 @@ function updateDraftDisplay() {
     updateTimer();
 }
 
-// Update draft status panel
-function updateDraftStatus() {
-    const statusDiv = document.getElementById('draftStatus');
+/**
+ * Updates the draft status panel with current round, pick, and turn information
+ * Handles different draft states: complete, inactive, and active
+ */
+function updateDraftStatusPanel() {
+    const draftStatusContainer = document.getElementById('draftStatus');
 
-    // Check if draft is complete first
-    if (draftData.draftState.isDraftComplete) {
-        statusDiv.innerHTML = `
+    if (!draftStatusContainer || !currentDraftData?.draftState) {
+        return;
+    }
+
+    // Handle completed draft state
+    if (currentDraftData.draftState.isDraftComplete) {
+        draftStatusContainer.innerHTML = `
             <div class="alert alert-success">
                 <i class="bi bi-check-circle"></i> Draft Complete!
             </div>
         `;
-        showDraftCompleteModal();
+        showSuccess('Draft completed! All teams have been filled.');
         return;
     }
 
-    if (!draftData.draftState.isActive) {
-        statusDiv.innerHTML = `
+    // Handle inactive draft state (not yet started)
+    if (!currentDraftData.draftState.isActive) {
+        draftStatusContainer.innerHTML = `
             <div class="alert alert-warning">
                 <i class="bi bi-clock"></i> Draft has not started yet
             </div>
         `;
         return;
     }
-    
-    statusDiv.innerHTML = `
+
+    // Display active draft information
+    const currentRoundNumber = currentDraftData.draftState.currentRound;
+    const currentPickNumber = currentDraftData.draftState.currentPick;
+    const currentTurnUserName = currentDraftData.draftState.currentTurnUser?.name || 'Unknown';
+    const isCurrentUserTurn = currentDraftData.isUserTurn;
+
+    draftStatusContainer.innerHTML = `
         <div class="mb-2">
-            <strong>Round:</strong> ${draftData.draftState.currentRound}
+            <strong>Round:</strong> ${currentRoundNumber}
         </div>
         <div class="mb-2">
-            <strong>Pick:</strong> ${draftData.draftState.currentPick}
+            <strong>Pick:</strong> ${currentPickNumber}
         </div>
         <div class="mb-2">
             <strong>Current Turn:</strong><br>
-            <span class="text-primary">${draftData.draftState.currentTurnUser?.name || 'Unknown'}</span>
+            <span class="text-primary">${currentTurnUserName}</span>
         </div>
-        ${draftData.isUserTurn ? '<div class="alert alert-info p-2"><small><i class="bi bi-arrow-right"></i> Your turn!</small></div>' : ''}
+        ${isCurrentUserTurn ? '<div class="alert alert-info p-2"><small><i class="bi bi-arrow-right"></i> Your turn!</small></div>' : ''}
     `;
 }
 
-// Update draft order display
-function updateDraftOrder() {
-    const orderDiv = document.getElementById('draftOrder');
-    
-    if (!draftData.draftState.draftOrder || draftData.draftState.draftOrder.length === 0) {
-        orderDiv.innerHTML = '<small class="text-muted">Draft order not set</small>';
+/**
+ * Updates the draft order display showing participant sequence and current turn
+ * Highlights the current user and the user whose turn it is
+ */
+function updateDraftOrderDisplay() {
+    const draftOrderContainer = document.getElementById('draftOrder');
+
+    // Handle case where draft order is not yet established
+    if (!currentDraftData.draftState.draftOrder || currentDraftData.draftState.draftOrder.length === 0) {
+        draftOrderContainer.innerHTML = '<small class="text-muted">Draft order not set</small>';
         return;
     }
-    
-    const orderHtml = draftData.draftState.draftOrder.map((user, index) => {
-        const isCurrentTurn = draftData.draftState.currentTurnUser && 
-            user._id === draftData.draftState.currentTurnUser._id;
-        const isCurrentUser = user._id === currentUserId;
-        
-        let classes = 'p-2 border-bottom';
-        if (isCurrentTurn) classes += ' current-turn';
-        if (isCurrentUser) classes += ' my-turn';
-        
+
+    // Generate HTML for each participant in draft order
+    const draftOrderHtml = currentDraftData.draftState.draftOrder.map((participantUser, orderIndex) => {
+        // Determine if this user is currently picking
+        const isUserCurrentlyPicking = currentDraftData.draftState.currentTurnUser &&
+            participantUser._id === currentDraftData.draftState.currentTurnUser._id;
+
+        // Determine if this is the logged-in user
+        const isLoggedInUser = participantUser._id === currentUserId;
+
+        // Build CSS classes for styling
+        let cssClasses = 'p-2 border-bottom';
+        if (isUserCurrentlyPicking) cssClasses += ' current-turn';
+        if (isLoggedInUser) cssClasses += ' my-turn';
+
+        // Create HTML for this draft order entry
         return `
-            <div class="${classes}">
+            <div class="${cssClasses}">
                 <small>
-                    ${index + 1}. ${escapeHtml(user.name)}
-                    ${isCurrentUser ? ' (You)' : ''}
-                    ${isCurrentTurn ? ' <i class="bi bi-arrow-right"></i>' : ''}
+                    ${orderIndex + 1}. ${escapeHtml(participantUser.name)}
+                    ${isLoggedInUser ? ' (You)' : ''}
+                    ${isUserCurrentlyPicking ? ' <i class="bi bi-arrow-right"></i>' : ''}
                 </small>
             </div>
         `;
     }).join('');
-    
-    orderDiv.innerHTML = orderHtml;
+
+    draftOrderContainer.innerHTML = draftOrderHtml;
 }
 
 // Update current pick information
@@ -141,7 +222,7 @@ function updateCurrentPickInfo() {
     const infoDiv = document.getElementById('currentPickInfo');
 
     // Check if draft is complete first
-    if (draftData.draftState.isDraftComplete) {
+    if (currentDraftData.draftState.isDraftComplete) {
         infoDiv.innerHTML = `
             <div class="text-center">
                 <h5 class="text-success">Draft Complete!</h5>
@@ -151,7 +232,7 @@ function updateCurrentPickInfo() {
         return;
     }
 
-    if (!draftData.draftState.isActive) {
+    if (!currentDraftData.draftState.isActive) {
         infoDiv.innerHTML = `
             <div class="text-center">
                 <h5>Waiting for draft to start...</h5>
@@ -160,13 +241,13 @@ function updateCurrentPickInfo() {
         `;
         return;
     }
-    
-    const currentUser = draftData.draftState.currentTurnUser;
-    const isUserTurn = draftData.isUserTurn;
-    
+
+    const currentUser = currentDraftData.draftState.currentTurnUser;
+    const isUserTurn = currentDraftData.isUserTurn;
+
     infoDiv.innerHTML = `
         <div class="text-center">
-            <h5>Round ${draftData.draftState.currentRound}, Pick ${draftData.draftState.currentPick}</h5>
+            <h5>Round ${currentDraftData.draftState.currentRound}, Pick ${currentDraftData.draftState.currentPick}</h5>
             <p class="mb-2">
                 ${isUserTurn ? 
                     '<span class="text-primary"><strong>Your turn to pick!</strong></span>' : 
@@ -184,8 +265,8 @@ function updateCurrentPickInfo() {
 // Update available players list
 function updateAvailablePlayers() {
     const playersDiv = document.getElementById('availablePlayers');
-    
-    if (!draftData.availablePlayers || draftData.availablePlayers.length === 0) {
+
+    if (!currentDraftData.availablePlayers || currentDraftData.availablePlayers.length === 0) {
         playersDiv.innerHTML = `
             <div class="text-center p-4">
                 <p class="text-muted">No players available</p>
@@ -194,13 +275,13 @@ function updateAvailablePlayers() {
         return;
     }
     
-    const playersHtml = draftData.availablePlayers.map(player => {
+    const playersHtml = currentDraftData.availablePlayers.map(player => {
         const academicScore = calculateAverageScore(player.academicHistory);
         const effortScore = calculateTotalEffort(player.weeklyStudyContributions);
         
         return `
-            <div class="player-card p-3 border-bottom ${draftData.isUserTurn ? 'draftable' : ''}" 
-                 onclick="selectPlayer('${player._id}')" 
+            <div class="player-card p-3 border-bottom ${currentDraftData.isUserTurn ? 'draftable' : ''}"
+                 onclick="selectPlayer('${player._id}')"
                  data-player-id="${player._id}"
                  data-player-name="${escapeHtml(player.name)}"
                  data-academic-score="${academicScore}"
@@ -209,13 +290,13 @@ function updateAvailablePlayers() {
                     <div>
                         <h6 class="mb-1">${escapeHtml(player.name)}</h6>
                         <small class="text-muted">
-                            Academic: ${academicScore.toFixed(1)} | 
+                            Academic: ${academicScore.toFixed(1)} |
                             Effort: ${effortScore.toFixed(1)}
                         </small>
                     </div>
                     <div>
-                        ${draftData.isUserTurn ? 
-                            '<button class="btn btn-sm btn-outline-primary">Select</button>' : 
+                        ${currentDraftData.isUserTurn ?
+                            '<button class="btn btn-sm btn-outline-primary">Select</button>' :
                             '<button class="btn btn-sm btn-outline-secondary" disabled>View</button>'
                         }
                     </div>
@@ -230,8 +311,8 @@ function updateAvailablePlayers() {
 // Update teams and rosters
 function updateTeamsRosters() {
     const rostersDiv = document.getElementById('teamsRosters');
-    
-    if (!draftData.participants || draftData.participants.length === 0) {
+
+    if (!currentDraftData.participants || currentDraftData.participants.length === 0) {
         rostersDiv.innerHTML = `
             <div class="text-center p-4">
                 <p class="text-muted">No teams found</p>
@@ -240,7 +321,7 @@ function updateTeamsRosters() {
         return;
     }
     
-    const rostersHtml = draftData.participants.map(participant => {
+    const rostersHtml = currentDraftData.participants.map(participant => {
         const team = participant.teamID;
         const isMyTeam = participant.userID._id === currentUserId;
         
@@ -272,13 +353,13 @@ function updateTeamsRosters() {
 // Update recent picks
 function updateRecentPicks() {
     const picksDiv = document.getElementById('recentPicks');
-    
-    if (!draftData.draftState.pickHistory || draftData.draftState.pickHistory.length === 0) {
+
+    if (!currentDraftData.draftState.pickHistory || currentDraftData.draftState.pickHistory.length === 0) {
         picksDiv.innerHTML = '<div class="text-center"><small class="text-muted">No picks yet</small></div>';
         return;
     }
     
-    const recentPicks = draftData.draftState.pickHistory.slice(-10).reverse();
+    const recentPicks = currentDraftData.draftState.pickHistory.slice(-10).reverse();
     
     const picksHtml = recentPicks.map(pick => `
         <span class="badge bg-secondary me-2 mb-2">
@@ -295,8 +376,12 @@ function updateTimer() {
     const timerCard = document.getElementById('timerCard');
     const timerDiv = document.getElementById('turnTimer');
     const autoPickBtn = document.getElementById('autoPickBtn');
-    
-    if (!draftData.draftState.isActive || draftData.draftState.isDraftComplete) {
+
+    if (!timerCard || !timerDiv || !autoPickBtn || !currentDraftData?.draftState) {
+        return;
+    }
+
+    if (!currentDraftData.draftState.isActive || currentDraftData.draftState.isDraftComplete) {
         timerCard.style.display = 'none';
         if (turnTimer) {
             clearInterval(turnTimer);
@@ -305,18 +390,20 @@ function updateTimer() {
         return;
     }
     
-    if (draftData.isUserTurn) {
+    if (currentDraftData.isUserTurn) {
         timerCard.style.display = 'block';
         autoPickBtn.style.display = 'block';
 
         // Calculate actual time remaining based on turn start time
         const now = new Date();
-        const turnStartTime = new Date(draftData.draftState.currentTurnStartTime);
+        const turnStartTime = currentDraftData.draftState.currentTurnStartTime ?
+            new Date(currentDraftData.draftState.currentTurnStartTime) : now;
+        const timeLimitPerPick = currentDraftData.draftSettings?.timeLimitPerPick || 60; // Default 60 seconds
         const elapsedSeconds = Math.floor((now.getTime() - turnStartTime.getTime()) / 1000);
-        const actualTimeRemaining = Math.max(0, draftData.draftSettings.timeLimitPerPick - elapsedSeconds);
+        const actualTimeRemaining = Math.max(0, timeLimitPerPick - elapsedSeconds);
 
         // Only restart timer if we don't have one running or if the calculated time is significantly different
-        if (!turnTimer || Math.abs(timeRemaining - actualTimeRemaining) > 2) {
+        if (!turnTimer || Math.abs((timeRemaining || 0) - actualTimeRemaining) > 2) {
             // Clear any existing timer
             if (turnTimer) {
                 clearInterval(turnTimer);
@@ -331,7 +418,7 @@ function updateTimer() {
 
             // If time has already expired, auto-pick immediately
             if (timeRemaining <= 0) {
-                makeAutoPick();
+                executeAutoPick();
                 return;
             }
 
@@ -350,17 +437,18 @@ function updateTimer() {
                 if (timeRemaining <= 0) {
                     clearInterval(turnTimer);
                     turnTimer = null;
-                    makeAutoPick();
+                    executeAutoPick();
                 }
             }, 1000);
         }
 
         // Update display immediately with current time
-        const minutes = Math.floor(timeRemaining / 60);
-        const seconds = timeRemaining % 60;
+        const safeTimeRemaining = timeRemaining || 0;
+        const minutes = Math.floor(safeTimeRemaining / 60);
+        const seconds = safeTimeRemaining % 60;
         timerDiv.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
 
-        if (timeRemaining <= 10) {
+        if (safeTimeRemaining <= 10) {
             timerDiv.classList.add('timer-warning');
         }
     } else {
@@ -373,69 +461,89 @@ function updateTimer() {
     }
 }
 
-// Select a player
+/**
+ * Handles player selection from the available players list
+ * Shows player details and sets selection for drafting if it's user's turn
+ * @param {string} playerId - ID of the player to select
+ */
 function selectPlayer(playerId) {
-    if (!draftData.isUserTurn) {
+    // If it's not the user's turn, just show player details
+    if (!currentDraftData.isUserTurn) {
         showPlayerDetails(playerId);
         return;
     }
-    
-    selectedPlayerId = playerId;
+
+    // Set the selected player for potential drafting
+    currentlySelectedPlayerId = playerId;
     showPlayerDetails(playerId);
 }
 
-// Show player details modal
+/**
+ * Displays detailed information about a player in a modal
+ * Shows academic scores, effort hours, and recent performance
+ * @param {string} playerId - ID of the player to show details for
+ */
 function showPlayerDetails(playerId) {
-    const player = draftData.availablePlayers.find(p => p._id === playerId);
-    if (!player) return;
-    
-    const academicScore = calculateAverageScore(player.academicHistory);
-    const effortScore = calculateTotalEffort(player.weeklyStudyContributions);
-    
-    const modalContent = document.getElementById('playerDetailsContent');
-    modalContent.innerHTML = `
+    // Find the player in the available players list
+    const selectedPlayer = currentDraftData.availablePlayers.find(player => player._id === playerId);
+    if (!selectedPlayer) return;
+
+    // Calculate player statistics
+    const playerAcademicAverage = calculateAverageScore(selectedPlayer.academicHistory);
+    const playerTotalEffortHours = calculateTotalEffort(selectedPlayer.weeklyStudyContributions);
+
+    // Populate modal content with player information
+    const playerDetailsContentContainer = document.getElementById('playerDetailsContent');
+    playerDetailsContentContainer.innerHTML = `
         <div class="row">
             <div class="col-md-6">
-                <h5>${escapeHtml(player.name)}</h5>
-                <p><strong>Academic Average:</strong> ${academicScore.toFixed(1)}%</p>
-                <p><strong>Total Effort Hours:</strong> ${effortScore.toFixed(1)}</p>
+                <h5>${escapeHtml(selectedPlayer.name)}</h5>
+                <p><strong>Academic Average:</strong> ${playerAcademicAverage.toFixed(1)}%</p>
+                <p><strong>Total Effort Hours:</strong> ${playerTotalEffortHours.toFixed(1)}</p>
             </div>
             <div class="col-md-6">
                 <h6>Recent Academic Scores</h6>
-                ${player.academicHistory?.slice(-5).map(entry => 
-                    `<div>${entry.grade_percent}% - ${new Date(entry.date).toLocaleDateString()}</div>`
+                ${selectedPlayer.academicHistory?.slice(-5).map(academicEntry =>
+                    `<div>${academicEntry.grade_percent}% - ${new Date(academicEntry.date).toLocaleDateString()}</div>`
                 ).join('') || '<div class="text-muted">No data</div>'}
             </div>
         </div>
     `;
-    
-    const draftBtn = document.getElementById('draftPlayerBtn');
-    if (draftData.isUserTurn) {
-        draftBtn.style.display = 'block';
-        // Don't set onclick here - use the selectedPlayerId instead
-        selectedPlayerId = playerId;
+
+    // Show/hide draft button based on turn status
+    const draftPlayerButton = document.getElementById('draftPlayerBtn');
+    if (currentDraftData.isUserTurn) {
+        draftPlayerButton.style.display = 'block';
+        // Update selected player ID for drafting
+        currentlySelectedPlayerId = playerId;
     } else {
-        draftBtn.style.display = 'none';
+        draftPlayerButton.style.display = 'none';
     }
-    
-    const modal = new bootstrap.Modal(document.getElementById('playerDetailsModal'));
-    modal.show();
+
+    // Display the modal
+    const playerDetailsModal = new bootstrap.Modal(document.getElementById('playerDetailsModal'));
+    playerDetailsModal.show();
 }
 
-// Draft a player
+/**
+ * Drafts a specific player for the current user's team
+ * Handles API communication and prevents duplicate requests
+ * @param {string} playerId - ID of the player to draft
+ */
 async function draftPlayer(playerId) {
     // Prevent duplicate draft requests
-    if (isDrafting) {
+    if (isDraftRequestInProgress) {
         console.log('Draft already in progress, ignoring duplicate request');
         return;
     }
 
-    isDrafting = true;
+    isDraftRequestInProgress = true;
 
     try {
         console.log(`Drafting player: ${playerId}`);
 
-        const response = await fetch(`/api/draft/${leagueId}/pick`, {
+        // Send draft request to API
+        const draftResponse = await fetch(`/api/draft/${leagueId}/pick`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -443,124 +551,136 @@ async function draftPlayer(playerId) {
             body: JSON.stringify({ playerId })
         });
 
-        const result = await response.json();
+        const draftResult = await draftResponse.json();
 
-        if (result.success) {
-            showSuccess(`Successfully drafted ${result.pick.player.name}!`);
-            bootstrap.Modal.getInstance(document.getElementById('playerDetailsModal'))?.hide();
+        if (draftResult.success) {
+            showSuccess(`Successfully drafted ${draftResult.pick.player.name}!`);
 
-            // Clear timer
+            // Close player details modal if open
+            const playerDetailsModalInstance = bootstrap.Modal.getInstance(document.getElementById('playerDetailsModal'));
+            playerDetailsModalInstance?.hide();
+
+            // Clear the turn timer since pick is complete
             if (turnTimer) {
                 clearInterval(turnTimer);
                 turnTimer = null;
             }
 
-            // Reload draft status
+            // Reload draft status after a brief delay
             setTimeout(loadDraftStatus, 1000);
         } else {
-            showError('Failed to draft player: ' + result.error);
+            showError('Failed to draft player: ' + draftResult.error);
         }
-    } catch (error) {
-        console.error('Error drafting player:', error);
+    } catch (errorObject) {
+        console.error('Error drafting player:', errorObject);
         showError('Failed to draft player');
     } finally {
-        // Always reset the drafting flag
-        isDrafting = false;
+        // Always reset the drafting flag to allow future requests
+        isDraftRequestInProgress = false;
     }
 }
 
-// Draft selected player
-function draftSelectedPlayer() {
-    if (selectedPlayerId) {
-        draftPlayer(selectedPlayerId);
+/**
+ * Drafts the currently selected player
+ * Wrapper function that calls draftPlayer with the selected player ID
+ */
+function draftCurrentlySelectedPlayer() {
+    if (currentlySelectedPlayerId) {
+        draftPlayer(currentlySelectedPlayerId);
     }
 }
 
-// Make auto pick
-async function makeAutoPick() {
+/**
+ * Executes an automatic pick for the current user's turn
+ * Prevents duplicate requests and handles API communication
+ */
+async function executeAutoPick() {
     // Prevent duplicate auto-pick requests
-    if (isDrafting) {
+    if (isDraftRequestInProgress) {
         console.log('Draft already in progress, ignoring auto-pick request');
         return;
     }
 
-    isDrafting = true;
+    isDraftRequestInProgress = true;
 
     try {
         console.log('Making auto-pick');
 
-        const response = await fetch(`/api/draft/${leagueId}/auto-pick`, {
+        // Send auto-pick request to API
+        const autoPickResponse = await fetch(`/api/draft/${leagueId}/auto-pick`, {
             method: 'POST'
         });
 
-        const result = await response.json();
+        const autoPickResult = await autoPickResponse.json();
 
-        if (result.success) {
-            showSuccess(`Auto-picked ${result.pick.player.name}!`);
+        if (autoPickResult.success) {
+            showSuccess(`Auto-picked ${autoPickResult.pick.player.name}!`);
 
-            // Clear timer
+            // Clear the turn timer since pick is complete
             if (turnTimer) {
                 clearInterval(turnTimer);
                 turnTimer = null;
             }
 
-            // Reload draft status
+            // Reload draft status after a brief delay
             setTimeout(loadDraftStatus, 1000);
         } else {
-            showError('Failed to auto-pick: ' + result.error);
+            showError('Failed to auto-pick: ' + autoPickResult.error);
         }
-    } catch (error) {
-        console.error('Error with auto-pick:', error);
+    } catch (errorObject) {
+        console.error('Error with auto-pick:', errorObject);
         showError('Failed to auto-pick');
     } finally {
-        // Always reset the drafting flag
-        isDrafting = false;
+        // Always reset the drafting flag to allow future requests
+        isDraftRequestInProgress = false;
     }
 }
 
-// Filter players
-function filterPlayers() {
-    const searchTerm = document.getElementById('playerSearch').value.toLowerCase();
-    const playerCards = document.querySelectorAll('.player-card');
-    
-    playerCards.forEach(card => {
-        const playerName = card.dataset.playerName.toLowerCase();
-        if (playerName.includes(searchTerm)) {
-            card.style.display = 'block';
-        } else {
-            card.style.display = 'none';
-        }
+/**
+ * Filters available players based on search input
+ * Shows/hides player cards that match the search term
+ */
+function filterAvailablePlayers() {
+    const searchInputValue = document.getElementById('playerSearch').value.toLowerCase();
+    const allPlayerCards = document.querySelectorAll('.player-card');
+
+    // Show/hide cards based on name match
+    allPlayerCards.forEach(playerCard => {
+        const playerNameFromCard = playerCard.dataset.playerName.toLowerCase();
+        const shouldShowCard = playerNameFromCard.includes(searchInputValue);
+
+        playerCard.style.display = shouldShowCard ? 'block' : 'none';
     });
 }
 
-// Sort players
-function sortPlayers() {
-    const sortBy = document.getElementById('sortPlayers').value;
-    const playersContainer = document.getElementById('availablePlayers');
-    const playerCards = Array.from(playersContainer.querySelectorAll('.player-card'));
-    
-    playerCards.sort((a, b) => {
-        switch (sortBy) {
+/**
+ * Sorts available players by selected criteria (name, academic score, effort score)
+ * Reorders the player cards in the DOM based on sort selection
+ */
+function sortAvailablePlayers() {
+    const selectedSortCriteria = document.getElementById('sortPlayers').value;
+    const playersDisplayContainer = document.getElementById('availablePlayers');
+    const allPlayerCards = Array.from(playersDisplayContainer.querySelectorAll('.player-card'));
+
+    // Sort cards based on selected criteria
+    allPlayerCards.sort((firstCard, secondCard) => {
+        switch (selectedSortCriteria) {
             case 'name':
-                return a.dataset.playerName.localeCompare(b.dataset.playerName);
+                return firstCard.dataset.playerName.localeCompare(secondCard.dataset.playerName);
             case 'academic':
-                return parseFloat(b.dataset.academicScore) - parseFloat(a.dataset.academicScore);
+                return parseFloat(secondCard.dataset.academicScore) - parseFloat(firstCard.dataset.academicScore);
             case 'effort':
-                return parseFloat(b.dataset.effortScore) - parseFloat(a.dataset.effortScore);
+                return parseFloat(secondCard.dataset.effortScore) - parseFloat(firstCard.dataset.effortScore);
             default:
                 return 0;
         }
     });
-    
-    // Re-append sorted cards
-    playerCards.forEach(card => playersContainer.appendChild(card));
+
+    // Re-append sorted cards to maintain new order
+    allPlayerCards.forEach(playerCard => playersDisplayContainer.appendChild(playerCard));
 }
 
-// Show draft complete modal
-function showDraftCompleteModal() {
-    const modal = new bootstrap.Modal(document.getElementById('draftCompleteModal'));
-    modal.show();
-}
+
 
 // Utility functions
 function calculateAverageScore(academicHistory) {
@@ -587,3 +707,5 @@ function showError(message) {
 function showSuccess(message) {
     alert(message); // Could be enhanced with toast notifications
 }
+
+

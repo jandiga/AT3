@@ -1,9 +1,12 @@
+// Core Express.js imports for server functionality
 import express from 'express';
 import session from 'express-session';
 import MongoStore from 'connect-mongo';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+
+// Application-specific imports
 import connectDB from './src/config/database.js';
 import authRoutes from './src/routes/auth.js';
 import dashboardRoutes from './src/routes/dashboard.js';
@@ -11,192 +14,215 @@ import playerRoutes from './src/routes/players.js';
 import leagueRoutes from './src/routes/leagues.js';
 import draftRoutes from './src/routes/draft.js';
 import teamRoutes from './src/routes/teams.js';
-import { isAuthenticated, isTeacher } from './src/middleware/auth.js';
+import { isAuthenticated, isTeacher, optionalAuthentication } from './src/middleware/auth.js';
 import draftTimerService from './src/services/draftTimerService.js';
 
-// Configuration
+// Load environment variables from .env file
 dotenv.config();
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const app = express();
-const port = process.env.PORT || 3000;
 
-// Connect to MongoDB
+// ES6 module compatibility for __dirname
+const currentFileUrl = fileURLToPath(import.meta.url);
+const currentDirectoryPath = path.dirname(currentFileUrl);
+
+// Initialize Express application
+const expressApplication = express();
+const serverPort = process.env.PORT || 3000;
+
+// Establish database connection
 connectDB();
 
-// Middleware
-app.set('view engine', 'ejs');
-app.use(express.static(path.join(__dirname, 'public')));
-app.use(express.urlencoded({ extended: true }));
-app.use(express.json());
+// Configure Express application settings
+expressApplication.set('view engine', 'ejs');
+expressApplication.use(express.static(path.join(currentDirectoryPath, 'public')));
+expressApplication.use(express.urlencoded({ extended: true }));
+expressApplication.use(express.json());
 
-// Session configuration
-app.use(session({
+// Configure session management with MongoDB store
+const sessionTimeToLiveInSeconds = 24 * 60 * 60; // 24 hours in seconds
+const cookieMaxAgeInMilliseconds = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+
+expressApplication.use(session({
     secret: process.env.SESSION_SECRET,
-    resave: false,
-    saveUninitialized: false,
+    resave: false, // Don't save session if unmodified
+    saveUninitialized: false, // Don't create session until something stored
     store: MongoStore.create({
         mongoUrl: process.env.MONGODB_URI,
-        ttl: 24 * 60 * 60 // Session TTL (1 day)
+        ttl: sessionTimeToLiveInSeconds
     }),
     cookie: {
-        secure: process.env.NODE_ENV === 'production',
-        maxAge: 24 * 60 * 60 * 1000 // Cookie TTL (1 day)
+        secure: process.env.NODE_ENV === 'production', // HTTPS only in production
+        maxAge: cookieMaxAgeInMilliseconds
     }
 }));
 
-// Middleware to make user available to all templates
-app.use((req, res, next) => {
-    res.locals.user = req.session.user;
-    next();
+// Global middleware to make user session data available to all EJS templates
+expressApplication.use((requestObject, responseObject, nextFunction) => {
+    responseObject.locals.user = requestObject.session.user;
+    nextFunction();
 });
 
-// Routes
-app.use('/', authRoutes);
-app.use('/dashboard', dashboardRoutes);
-app.use(playerRoutes);
-app.use(leagueRoutes);
-app.use(draftRoutes);
-app.use(teamRoutes);
+// Register application routes
+expressApplication.use('/', authRoutes);
+expressApplication.use('/dashboard', dashboardRoutes);
+expressApplication.use(playerRoutes);
+expressApplication.use(leagueRoutes);
+expressApplication.use(draftRoutes);
+expressApplication.use(teamRoutes);
 
-// Home route
-app.get('/', (req, res) => {
-    res.render('index');
+// Home page route - displays main landing page
+expressApplication.get('/', (requestObject, responseObject) => {
+    responseObject.render('index');
 });
 
-// Add these routes before your 404 handler
-app.get('/login', (req, res) => {
-    if (req.session.user) {
-        return res.redirect('/dashboard');
+// Authentication routes with redirect logic for logged-in users
+expressApplication.get('/login', (requestObject, responseObject) => {
+    // Redirect to dashboard if user is already authenticated
+    if (requestObject.session.user) {
+        return responseObject.redirect('/dashboard');
     }
-    res.render('login', { error: undefined });
+    responseObject.render('login', { error: undefined });
 });
 
-app.get('/sign-up', (req, res) => {
-    if (req.session.user) {
-        return res.redirect('/dashboard');
+expressApplication.get('/sign-up', (requestObject, responseObject) => {
+    // Redirect to dashboard if user is already authenticated
+    if (requestObject.session.user) {
+        return responseObject.redirect('/dashboard');
     }
-    res.render('signup');
+    responseObject.render('signup');
 });
 
-app.get('/leagues', (req, res) => {
-    res.render('leagues', { user: req.session.user });
+// Leagues overview page - allows public access
+expressApplication.get('/leagues', (requestObject, responseObject) => {
+    responseObject.render('leagues', { user: requestObject.session.user });
 });
 
-// League detail view
-app.get('/leagues/:leagueId', isAuthenticated, async (req, res) => {
+// League detail view - allows public access for public leagues
+expressApplication.get('/leagues/:leagueId', async (requestObject, responseObject) => {
     try {
-        const { leagueId } = req.params;
-        // This would render a detailed league view
-        res.render('league-detail', {
-            user: req.session.user,
+        const { leagueId } = requestObject.params;
+        // Render detailed league view with user context and league ID
+        responseObject.render('league-detail', {
+            user: requestObject.session.user,
             leagueId: leagueId
         });
-    } catch (error) {
-        res.status(500).render('error', { message: error.message });
+    } catch (errorObject) {
+        responseObject.status(500).render('error', { message: errorObject.message });
     }
 });
 
-// Draft view
-app.get('/draft/:leagueId', isAuthenticated, async (req, res) => {
+// Draft interface - handles live drafting functionality
+expressApplication.get('/draft/:leagueId', isAuthenticated, async (requestObject, responseObject) => {
     try {
-        const { leagueId } = req.params;
-        res.render('drafting', {
-            user: req.session.user,
+        const { leagueId } = requestObject.params;
+        // Render drafting interface with user session and league context
+        responseObject.render('drafting', {
+            user: requestObject.session.user,
             leagueId: leagueId
         });
-    } catch (error) {
-        res.status(500).render('error', { message: error.message });
+    } catch (errorObject) {
+        responseObject.status(500).render('error', { message: errorObject.message });
     }
 });
 
-app.get('/leaderboard', (req, res) => {
-    res.render('leaderboard');
+// Leaderboard page - displays league rankings and statistics
+expressApplication.get('/leaderboard', (requestObject, responseObject) => {
+    responseObject.render('leaderboard');
 });
 
-app.get('/team-management', (req, res) => {
-    res.render('team-management');
+// Team management interface - allows users to manage their teams
+expressApplication.get('/team-management', (requestObject, responseObject) => {
+    responseObject.render('team-management');
 });
 
-app.get('/settings', (req, res) => {
-    res.render('settings');
+// User settings page - handles account preferences and configuration
+expressApplication.get('/settings', (requestObject, responseObject) => {
+    responseObject.render('settings');
 });
 
-app.get('/profile', async (req, res) => {
+// User profile page - displays user information and associated teams
+expressApplication.get('/profile', async (requestObject, responseObject) => {
     try {
-        if (!req.session.user) {
-            return res.redirect('/login');
+        // Redirect unauthenticated users to login page
+        if (!requestObject.session.user) {
+            return responseObject.redirect('/login');
         }
 
-        let data = {
-            user: req.session.user
+        // Initialize profile data with basic user information
+        let profileData = {
+            user: requestObject.session.user
         };
 
-        if (req.session.user.role === 'Student') {
-            // For students, fetch their teams and the players on those teams
-            const Team = (await import('./src/models/Team.js')).default;
-            const User = (await import('./src/models/User.js')).default;
+        // For student users, fetch their team information and player details
+        if (requestObject.session.user.role === 'Student') {
+            // Dynamic imports for database models
+            const TeamModel = (await import('./src/models/Team.js')).default;
+            const UserModel = (await import('./src/models/User.js')).default;
 
-            // Get the full user data with linked teams
-            const fullUser = await User.findById(req.session.user.id)
+            // Retrieve complete user data including linked teams
+            const completeUserData = await UserModel.findById(requestObject.session.user.id)
                 .populate('linkedTeams');
 
-            if (fullUser && fullUser.linkedTeams && fullUser.linkedTeams.length > 0) {
-                // Get teams with populated rosters, sorted by newest first
-                const teams = await Team.find({
-                    _id: { $in: fullUser.linkedTeams },
-                    ownerID: req.session.user.id
+            // If user has associated teams, fetch detailed team information
+            if (completeUserData && completeUserData.linkedTeams && completeUserData.linkedTeams.length > 0) {
+                // Query teams with populated player rosters and league information
+                const userTeamsWithDetails = await TeamModel.find({
+                    _id: { $in: completeUserData.linkedTeams },
+                    ownerID: requestObject.session.user.id
                 })
                 .populate('roster.playerID', 'name academicHistory weeklyStudyContributions')
                 .populate('leagueID', 'leagueName status')
-                .sort({ dateCreated: -1 }); // Sort by newest first
+                .sort({ dateCreated: -1 }); // Sort by creation date, newest first
 
-                data.teams = teams;
+                profileData.teams = userTeamsWithDetails;
             }
         }
 
-        res.render('profile', data);
-    } catch (error) {
-        console.error(error);
-        res.status(500).render('error', { message: error.message });
+        responseObject.render('profile', profileData);
+    } catch (errorObject) {
+        console.error(errorObject);
+        responseObject.status(500).render('error', { message: errorObject.message });
     }
 });
 
-app.get('/FAQ', (req, res) => {
-    res.render('faq');
+// Frequently Asked Questions page
+expressApplication.get('/FAQ', (requestObject, responseObject) => {
+    responseObject.render('faq');
 });
 
-app.get('/about', (req, res) => {
-    res.render('about');
+// About page - provides information about the application
+expressApplication.get('/about', (requestObject, responseObject) => {
+    responseObject.render('about');
 });
 
-app.get('/create-player', isAuthenticated, isTeacher, (req, res) => {
-    res.render('create-player', {
-        user: req.session.user,
-        success: req.query.success,
-        playerId: req.query.playerId,
-        error: req.query.error
+// Player creation interface - restricted to authenticated teachers only
+expressApplication.get('/create-player', isAuthenticated, isTeacher, (requestObject, responseObject) => {
+    responseObject.render('create-player', {
+        user: requestObject.session.user,
+        success: requestObject.query.success,
+        playerId: requestObject.query.playerId,
+        error: requestObject.query.error
     });
 });
 
-// Error handling middleware
-app.use((err, req, res, next) => {
-    console.error(err.stack);
-    res.status(500).render('error', { 
-        message: 'Something went wrong!' 
+// Global error handling middleware - catches and handles application errors
+expressApplication.use((errorObject, requestObject, responseObject, nextFunction) => {
+    console.error(errorObject.stack);
+    responseObject.status(500).render('error', {
+        message: 'Something went wrong!'
     });
 });
 
-// 404 handler
-app.use((req, res) => {
-    res.status(404).render('error', { 
-        message: 'Page not found' 
+// 404 Not Found handler - handles requests to non-existent routes
+expressApplication.use((requestObject, responseObject) => {
+    responseObject.status(404).render('error', {
+        message: 'Page not found'
     });
 });
 
-app.listen(port, () => {
-    console.log(`Server running on port ${port}`);
+// Start the Express server and initialize background services
+expressApplication.listen(serverPort, () => {
+    console.log(`Fantasy Academic League server running on port ${serverPort}`);
 
-    // Start the draft timer service
+    // Initialize the draft timer service for automated draft management
     draftTimerService.start();
 });
