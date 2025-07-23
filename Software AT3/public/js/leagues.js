@@ -6,6 +6,9 @@
 // Global state variables for league management
 let allAvailableLeagues = [];           // Stores all leagues fetched from API
 let currentlySelectedLeagueId = null;   // ID of league selected for joining
+let currentPage = 1;                    // Current page for pagination
+let hasMoreLeagues = true;              // Whether there are more leagues to load
+let lastFilterValue = '';               // Cache last filter to avoid unnecessary reloads
 
 /**
  * Initialize league management page when DOM is loaded
@@ -23,7 +26,13 @@ document.addEventListener('DOMContentLoaded', function() {
     const joinLeagueForm = document.getElementById('joinLeagueForm');
 
     // Add event listeners with null checks for safety
-    statusFilterSelect?.addEventListener('change', loadAllAvailableLeagues);
+    statusFilterSelect?.addEventListener('change', function() {
+        const currentFilter = this.value;
+        if (currentFilter !== lastFilterValue) {
+            lastFilterValue = currentFilter;
+            loadAllAvailableLeagues(true);
+        }
+    });
     myLeaguesTab?.addEventListener('shown.bs.tab', loadUserParticipatingLeagues);
     manageLeaguesTab?.addEventListener('shown.bs.tab', loadUserManagedLeagues);
     createLeagueForm?.addEventListener('submit', handleCreateLeague);
@@ -37,19 +46,44 @@ document.addEventListener('DOMContentLoaded', function() {
  * Loads all available leagues with optional status filtering
  * Fetches leagues from API and displays them in the browse tab
  */
-async function loadAllAvailableLeagues() {
+async function loadAllAvailableLeagues(reset = true) {
     try {
+        if (reset) {
+            currentPage = 1;
+            allAvailableLeagues = [];
+        }
+
         // Get current status filter value
         const statusFilterValue = document.getElementById('statusFilter')?.value || '';
-        const apiEndpointUrl = `/api/leagues${statusFilterValue ? `?status=${statusFilterValue}` : ''}`;
+        const params = new URLSearchParams();
+
+        if (statusFilterValue) params.append('status', statusFilterValue);
+        params.append('page', currentPage);
+        params.append('limit', '20');
+
+        const apiEndpointUrl = `/api/leagues?${params.toString()}`;
+
+        // Show loading indicator
+        if (reset) {
+            document.getElementById('leaguesList').innerHTML = '<div class="text-center"><div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+        }
 
         // Fetch leagues from API
         const leaguesResponse = await fetch(apiEndpointUrl);
         const leaguesData = await leaguesResponse.json();
 
         if (leaguesData.success) {
-            allAvailableLeagues = leaguesData.leagues;
-            displayLeagues(leaguesData.leagues, 'leaguesList');
+            if (reset) {
+                allAvailableLeagues = leaguesData.leagues;
+            } else {
+                allAvailableLeagues = [...allAvailableLeagues, ...leaguesData.leagues];
+            }
+
+            hasMoreLeagues = leaguesData.pagination?.hasMore || false;
+            displayLeagues(allAvailableLeagues, 'leaguesList');
+
+            // Update load more button
+            updateLoadMoreButton();
         } else {
             showErrorMessage('Failed to load leagues: ' + leaguesData.error);
         }
@@ -59,27 +93,38 @@ async function loadAllAvailableLeagues() {
     }
 }
 
+// Load more leagues function
+async function loadMoreLeagues() {
+    currentPage++;
+    await loadAllAvailableLeagues(false);
+}
+
+// Update load more button visibility
+function updateLoadMoreButton() {
+    const loadMoreBtn = document.getElementById('loadMoreBtn');
+    if (loadMoreBtn) {
+        if (hasMoreLeagues) {
+            loadMoreBtn.style.display = 'block';
+        } else {
+            loadMoreBtn.style.display = 'none';
+        }
+    }
+}
+
 /**
  * Loads leagues where the current user is a participant
  * Filters and displays only leagues the user has joined
  */
 async function loadUserParticipatingLeagues() {
     try {
-        // Fetch all leagues to filter for user participation
-        const allLeaguesResponse = await fetch('/api/leagues');
-        const allLeaguesData = await allLeaguesResponse.json();
+        // Fetch leagues where user is a participant using dedicated endpoint
+        const userLeaguesResponse = await fetch('/api/leagues/user/participating');
+        const userLeaguesData = await userLeaguesResponse.json();
 
-        if (allLeaguesData.success) {
-            // Filter leagues where current user is a participant
-            const currentUserId = getCurrentUserId();
-            const userParticipatingLeagues = currentUserId ? allLeaguesData.leagues.filter(league =>
-                league.participants.some(participant =>
-                    participant.userID._id === currentUserId
-                )
-            ) : [];
-            displayMyLeagues(userParticipatingLeagues, 'myLeaguesList');
+        if (userLeaguesData.success) {
+            displayMyLeagues(userLeaguesData.leagues, 'myLeaguesList');
         } else {
-            showErrorMessage('Failed to load your leagues: ' + allLeaguesData.error);
+            showErrorMessage('Failed to load your leagues: ' + userLeaguesData.error);
         }
     } catch (networkError) {
         console.error('Error loading user participating leagues:', networkError);
@@ -111,7 +156,7 @@ async function loadUserManagedLeagues() {
 // Display leagues in browse tab
 function displayLeagues(leagues, containerId) {
     const container = document.getElementById(containerId);
-    
+
     if (leagues.length === 0) {
         container.innerHTML = `
             <div class="alert alert-info">
@@ -154,7 +199,7 @@ function displayLeagues(leagues, containerId) {
             </div>
         </div>
     `).join('');
-    
+
     container.innerHTML = leaguesHtml;
 }
 
@@ -290,34 +335,42 @@ function getStatusText(status) {
 // Get action buttons for browse leagues
 function getLeagueActions(league) {
     const currentUserId = getCurrentUserId();
-    const isParticipant = league.participants && league.participants.some(p =>
-        p.userID._id === currentUserId && p.isActive
-    );
 
-    if (league.status === 'open' && !isParticipant) {
-        return `
-            <button class="btn btn-primary btn-sm" onclick="showJoinLeagueModal('${league._id}')">
-                <i class="bi bi-plus-circle"></i> Join League
-            </button>
-        `;
-    } else if (league.status === 'open' && isParticipant) {
-        return `
-            <button class="btn btn-outline-success btn-sm" disabled>
-                <i class="bi bi-check-circle"></i> Already Joined
-            </button>
-        `;
+    // Simple participant check
+    let isParticipant = false;
+    try {
+        if (currentUserId && league.participants) {
+            isParticipant = league.participants.some(p => {
+                if (!p.userID || !p.isActive) return false;
+                const participantId = p.userID._id || p.userID;
+                return participantId && participantId.toString() === currentUserId.toString();
+            });
+        }
+    } catch (error) {
+        console.error('Error checking participant status:', error);
+        isParticipant = false;
+    }
+
+    // Show appropriate actions based on user status and league status
+    if (!currentUserId) {
+        // Not logged in
+        if (league.status === 'open' || league.status === 'setup') {
+            return `<a href="/login" class="btn btn-primary btn-sm"><i class="bi bi-box-arrow-in-right"></i> Login to Join</a>`;
+        } else {
+            return `<button class="btn btn-outline-secondary btn-sm" onclick="viewLeague('${league._id}')"><i class="bi bi-eye"></i> View</button>`;
+        }
+    } else if ((league.status === 'open' || league.status === 'setup') && !isParticipant) {
+        // Can join
+        return `<button class="btn btn-primary btn-sm" onclick="showJoinLeagueModal('${league._id}')"><i class="bi bi-plus-circle"></i> Join League</button>`;
+    } else if ((league.status === 'open' || league.status === 'setup') && isParticipant) {
+        // Already joined
+        return `<button class="btn btn-outline-success btn-sm" disabled><i class="bi bi-check-circle"></i> Already Joined</button>`;
     } else if (league.status === 'drafting') {
-        return `
-            <button class="btn btn-warning btn-sm" onclick="viewDraft('${league._id}')">
-                <i class="bi bi-eye"></i> View Draft
-            </button>
-        `;
+        // Drafting
+        return `<button class="btn btn-warning btn-sm" onclick="viewDraft('${league._id}')"><i class="bi bi-eye"></i> View Draft</button>`;
     } else {
-        return `
-            <button class="btn btn-outline-secondary btn-sm" onclick="viewLeague('${league._id}')">
-                <i class="bi bi-eye"></i> View
-            </button>
-        `;
+        // Default view action
+        return `<button class="btn btn-outline-secondary btn-sm" onclick="viewLeague('${league._id}')"><i class="bi bi-eye"></i> View</button>`;
     }
 }
 
@@ -455,7 +508,7 @@ function showSuccessMessage(successMessage) {
 
 // Placeholder functions for actions (to be implemented)
 function showJoinLeagueModal(leagueId) {
-    selectedLeagueId = leagueId;
+    currentlySelectedLeagueId = leagueId;
     const modal = new bootstrap.Modal(document.getElementById('joinLeagueModal'));
     modal.show();
 }
@@ -698,7 +751,7 @@ async function handleJoinLeague(event) {
     const teamName = formData.get('teamName');
     
     try {
-        const response = await fetch(`/api/leagues/${selectedLeagueId}/join`, {
+        const response = await fetch(`/api/leagues/${currentlySelectedLeagueId}/join`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -712,7 +765,11 @@ async function handleJoinLeague(event) {
             showSuccessMessage('Successfully joined league!');
             bootstrap.Modal.getInstance(document.getElementById('joinLeagueModal')).hide();
             event.target.reset();
-            loadAllAvailableLeagues();
+
+            // Reset pagination and reload leagues
+            currentPage = 1;
+            hasMoreLeagues = true;
+            loadAllAvailableLeagues(true); // Force refresh
             loadUserParticipatingLeagues();
         } else {
             showErrorMessage('Failed to join league: ' + result.error);
@@ -720,5 +777,20 @@ async function handleJoinLeague(event) {
     } catch (error) {
         console.error('Error joining league:', error);
         showErrorMessage('Failed to join league');
+    }
+}
+
+// Force refresh all league data
+function forceRefreshLeagues() {
+    // Reset all cached data
+    allAvailableLeagues = [];
+    currentPage = 1;
+    hasMoreLeagues = true;
+    lastFilterValue = '';
+
+    // Reload all data
+    loadAllAvailableLeagues(true);
+    if (window.currentUserId) {
+        loadUserParticipatingLeagues();
     }
 }

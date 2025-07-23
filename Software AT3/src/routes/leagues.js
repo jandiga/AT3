@@ -1,4 +1,5 @@
 import express from 'express';
+import mongoose from 'mongoose';
 import { isAuthenticated, isTeacher, optionalAuthenticationAPI } from '../middleware/auth.js';
 import League from '../models/League.js';
 import Player from '../models/Player.js';
@@ -10,7 +11,8 @@ const router = express.Router();
 // Get all leagues (for browsing) - allows public access
 router.get('/api/leagues', optionalAuthenticationAPI, async (req, res) => {
     try {
-        const { status, classCode } = req.query;
+        const { status, classCode, page = 1, limit = 20 } = req.query;
+        const skip = (parseInt(page) - 1) * parseInt(limit);
         let query = {};
 
         // Filter by status if provided
@@ -38,13 +40,33 @@ router.get('/api/leagues', optionalAuthenticationAPI, async (req, res) => {
         }
 
         const leagues = await League.find(query)
+            .select('-draftPool -draftState.pickHistory') // Exclude heavy fields but keep participants for count
             .populate('createdByTeacherID', 'name')
-            .populate('participants.userID', 'name')
-            .sort({ dateCreated: -1 });
+            .populate('participants.userID', '_id name') // Essential for join button logic
+            .populate('participants.teamID', '_id teamName') // Essential for team info
+            .sort({ dateCreated: -1 })
+            .skip(skip)
+            .limit(parseInt(limit))
+            .lean(); // Use lean() for better performance
+
+        // Get total count for pagination (only if needed)
+        const totalCount = page == 1 ? await League.countDocuments(query) : null;
+
+        // Add participant count manually for better performance
+        const leaguesWithCounts = leagues.map(league => ({
+            ...league,
+            participantCount: league.participants ? league.participants.filter(p => p.isActive).length : 0
+        }));
 
         res.json({
             success: true,
-            leagues: leagues
+            leagues: leaguesWithCounts,
+            pagination: {
+                page: parseInt(page),
+                limit: parseInt(limit),
+                total: totalCount,
+                hasMore: leagues.length === parseInt(limit)
+            }
         });
     } catch (error) {
         console.error('Error fetching leagues:', error);
@@ -58,12 +80,18 @@ router.get('/api/leagues', optionalAuthenticationAPI, async (req, res) => {
 // Get leagues created by teacher
 router.get('/api/leagues/my-leagues', isAuthenticated, isTeacher, async (req, res) => {
     try {
-        const leagues = await League.find({ 
-            createdByTeacherID: req.session.user.id 
+        // Ensure user ID is properly converted to ObjectId
+        const userId = new mongoose.Types.ObjectId(req.session.user.id);
+
+        const leagues = await League.find({
+            createdByTeacherID: userId
         })
+        .select('-draftPool -draftState.pickHistory') // Exclude heavy fields
         .populate('participants.userID', 'name email')
         .populate('participants.teamID', 'teamName')
-        .sort({ dateCreated: -1 });
+        .sort({ dateCreated: -1 })
+        .limit(20) // Limit for performance
+        .lean();
         
         res.json({
             success: true,
@@ -296,11 +324,7 @@ router.get('/api/leagues/:leagueId', optionalAuthenticationAPI, async (req, res)
             .populate('participants.userID', 'name email')
             .populate({
                 path: 'participants.teamID',
-                select: 'teamName currentScores roster',
-                populate: {
-                    path: 'roster.playerID',
-                    select: 'name'
-                }
+                select: 'teamName currentScores', // Remove roster population for performance
             })
             .populate('draftPool', 'name academicHistory weeklyStudyContributions');
 
@@ -465,8 +489,11 @@ router.post('/api/leagues/:leagueId/join', isAuthenticated, async (req, res) => 
             });
         }
 
+        // Ensure user ID is properly converted to ObjectId
+        const userId = new mongoose.Types.ObjectId(req.session.user.id);
+
         // Check if user can join
-        if (!league.canUserJoin(req.session.user.id)) {
+        if (!league.canUserJoin(userId)) {
             return res.status(400).json({
                 success: false,
                 error: 'Cannot join this league'
@@ -476,7 +503,7 @@ router.post('/api/leagues/:leagueId/join', isAuthenticated, async (req, res) => 
         // Create team for the user
         const team = new Team({
             teamName: teamName.trim(),
-            ownerID: req.session.user.id,
+            ownerID: userId,
             leagueID: leagueId,
             classCode: league.classCode
         });
@@ -485,7 +512,7 @@ router.post('/api/leagues/:leagueId/join', isAuthenticated, async (req, res) => 
 
         // Add user to league participants
         league.participants.push({
-            userID: req.session.user.id,
+            userID: userId,
             teamID: team._id,
             joinedAt: new Date(),
             isActive: true
@@ -494,7 +521,7 @@ router.post('/api/leagues/:leagueId/join', isAuthenticated, async (req, res) => 
         await league.save();
 
         // Update user's linked leagues
-        await User.findByIdAndUpdate(req.session.user.id, {
+        await User.findByIdAndUpdate(userId, {
             $addToSet: {
                 linkedLeagues: leagueId,
                 linkedTeams: team._id
@@ -781,5 +808,35 @@ async function updateLeagueRankings(leagueId) {
         console.error('Error updating league rankings:', error);
     }
 }
+
+// Get leagues where user is a participant
+router.get('/api/leagues/user/participating', isAuthenticated, async (req, res) => {
+    try {
+        // Ensure user ID is properly converted to ObjectId
+        const userId = new mongoose.Types.ObjectId(req.session.user.id);
+
+        const leagues = await League.find({
+            'participants.userID': userId,
+            'participants.isActive': true
+        })
+        .select('-draftPool -draftState.pickHistory') // Exclude heavy fields
+        .populate('createdByTeacherID', 'name')
+        .populate('participants.userID', '_id name') // Essential for UI
+        .populate('participants.teamID', '_id teamName') // Essential for team info
+        .sort({ dateCreated: -1 })
+        .lean();
+
+        res.json({
+            success: true,
+            leagues: leagues
+        });
+    } catch (error) {
+        console.error('Error fetching user participating leagues:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
 
 export default router;

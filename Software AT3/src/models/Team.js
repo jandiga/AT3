@@ -228,5 +228,11 @@ teamSchema.methods.recordWeeklyScore = function(week) {
     return this.save();
 };
 
+// Create indexes for better query performance
+teamSchema.index({ ownerID: 1, dateCreated: -1 }); // For user's teams
+teamSchema.index({ leagueID: 1, 'currentScores.totalScore': -1 }); // For league leaderboards
+teamSchema.index({ 'roster.playerID': 1 }); // For player lookups
+teamSchema.index({ classCode: 1 }); // For class-based queries
+
 const Team = mongoose.model('Team', teamSchema);
 export default Team;

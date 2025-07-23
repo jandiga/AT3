@@ -15,15 +15,28 @@ document.addEventListener('DOMContentLoaded', function() {
  * Fetches and displays the current user's teams in active leagues
  * Makes API call to retrieve team data and handles response
  */
-async function loadCurrentUserTeams() {
+async function loadCurrentUserTeams(page = 1) {
     try {
-        // Request user's active teams from the API
-        const userTeamsResponse = await fetch('/api/teams/user/active');
+        // Show loading indicator
+        const container = document.getElementById('userTeamsContainer');
+        if (page === 1) {
+            container.innerHTML = '<div class="text-center"><div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+        }
+
+        // Request user's active teams from the API with pagination
+        const userTeamsResponse = await fetch(`/api/teams/user/active?page=${page}&limit=10`);
         const userTeamsData = await userTeamsResponse.json();
 
         // Process successful API response
         if (userTeamsData.success) {
-            displayUserTeams(userTeamsData.teams);
+            if (page === 1) {
+                displayUserTeams(userTeamsData.teams);
+            } else {
+                appendUserTeams(userTeamsData.teams);
+            }
+
+            // Update load more button
+            updateLoadMoreButton(userTeamsData.pagination?.hasMore || false);
         } else {
             showErrorMessage('Failed to load teams: ' + userTeamsData.error);
         }
@@ -33,13 +46,156 @@ async function loadCurrentUserTeams() {
     }
 }
 
+// Global variables for pagination
+let currentPage = 1;
+let hasMoreTeams = true;
+
+// Script loaded
+
+// Load more teams function
+async function loadMoreTeams() {
+    currentPage++;
+    await loadCurrentUserTeams(currentPage);
+}
+
+// Append teams to existing list
+function appendUserTeams(newTeams) {
+    const container = document.getElementById('userTeamsContainer');
+    const existingContent = container.innerHTML;
+
+    if (newTeams.length === 0) {
+        return;
+    }
+
+    // Generate HTML for new teams
+    const newTeamsHtml = newTeams.map(teamData => {
+        const associatedLeague = teamData.leagueID;
+        const teamTotalScore = teamData.currentScores?.totalScore || 0;
+        const teamAcademicScore = teamData.currentScores?.academicScore || 0;
+        const teamEffortScore = teamData.currentScores?.effortScore || 0;
+        const activeTeamRoster = teamData.roster ? teamData.roster.filter(rosterEntry => rosterEntry.isActive) : [];
+
+        return `
+            <div class="card mb-3">
+                <div class="card-body">
+                    <div class="row align-items-center">
+                        <div class="col-md-3">
+                            <h5 class="card-title mb-1">${escapeHtml(teamData.teamName)}</h5>
+                            <p class="text-muted mb-0">
+                                <i class="bi bi-trophy"></i> ${escapeHtml(associatedLeague.leagueName)}
+                            </p>
+                        </div>
+                        <div class="col-md-2">
+                            <span class="badge ${getLeagueStatusBadgeClass(associatedLeague.status)}">
+                                ${getLeagueStatusText(associatedLeague.status)}
+                            </span>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="text-center">
+                                <div class="fw-bold">${teamTotalScore}</div>
+                                <small class="text-muted">Total Score</small>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="text-center">
+                                <div class="fw-bold">${activeTeamRoster.length}</div>
+                                <small class="text-muted">Players</small>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="text-center">
+                                <small class="text-muted">Academic: ${teamAcademicScore}</small><br>
+                                <small class="text-muted">Effort: ${teamEffortScore}</small>
+                            </div>
+                        </div>
+                        <div class="col-md-1">
+                            <div class="dropdown">
+                                <button class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                                        type="button" data-bs-toggle="dropdown" aria-label="Team actions">
+                                    <i class="bi bi-three-dots"></i>
+                                </button>
+                                <ul class="dropdown-menu">
+                                    <li><a class="dropdown-item" href="/teams/${teamData._id}">
+                                        <i class="bi bi-eye"></i> View Details
+                                    </a></li>
+                                    <li><a class="dropdown-item" href="/leagues/${associatedLeague._id}">
+                                        <i class="bi bi-trophy"></i> View League
+                                    </a></li>
+                                    ${associatedLeague.status === 'drafting' ? `
+                                        <li><a class="dropdown-item" href="/draft/${associatedLeague._id}">
+                                            <i class="bi bi-play-circle"></i> Join Draft
+                                        </a></li>
+                                    ` : ''}
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    // Append new content
+    container.innerHTML = existingContent + newTeamsHtml;
+}
+
+// Update load more button visibility
+function updateLoadMoreButton(hasMore) {
+    hasMoreTeams = hasMore;
+    const loadMoreBtn = document.getElementById('loadMoreTeamsBtn');
+    if (loadMoreBtn) {
+        loadMoreBtn.style.display = hasMore ? 'block' : 'none';
+    }
+}
+
+// Utility functions
+function escapeHtml(text) {
+    const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+    };
+    return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+}
+
+function getLeagueStatusBadgeClass(status) {
+    switch (status) {
+        case 'active': return 'bg-success';
+        case 'drafting': return 'bg-warning';
+        case 'completed': return 'bg-secondary';
+        case 'setup': return 'bg-info';
+        default: return 'bg-light text-dark';
+    }
+}
+
+function getLeagueStatusText(status) {
+    switch (status) {
+        case 'active': return 'Active';
+        case 'drafting': return 'Drafting';
+        case 'completed': return 'Completed';
+        case 'setup': return 'Setup';
+        default: return status;
+    }
+}
+
+function showErrorMessage(message) {
+    const container = document.getElementById('userTeamsContainer');
+    container.innerHTML = `
+        <div class="alert alert-danger">
+            <i class="bi bi-exclamation-triangle"></i> ${escapeHtml(message)}
+        </div>
+    `;
+}
+
 /**
  * Displays the user's teams in the team management interface
  * Creates HTML cards for each team with scores, roster info, and action buttons
  * @param {Array} userTeamsList - Array of team objects to display
  */
 function displayUserTeams(userTeamsList) {
-    const teamsDisplayContainer = document.getElementById('teamsContainer');
+    const teamsDisplayContainer = document.getElementById('userTeamsContainer');
 
     // Handle case where user has no teams
     if (!userTeamsList || userTeamsList.length === 0) {
@@ -188,21 +344,7 @@ function getLeagueStatusColor(leagueStatus) {
     return statusColorMapping[leagueStatus] || 'secondary';
 }
 
-/**
- * Returns human-readable text for league status
- * @param {string} leagueStatus - Current status of the league
- * @returns {string} Display text for the status
- */
-function getLeagueStatusText(leagueStatus) {
-    const statusTextMapping = {
-        'setup': 'Setup',
-        'open': 'Open for Registration',
-        'drafting': 'Drafting',
-        'active': 'Active',
-        'completed': 'Completed'
-    };
-    return statusTextMapping[leagueStatus] || leagueStatus;
-}
+// Duplicate function removed - using the simpler one above
 
 /**
  * Escapes HTML characters to prevent XSS attacks
@@ -223,18 +365,7 @@ function refreshUserTeams() {
     loadCurrentUserTeams();
 }
 
-/**
- * Displays an error message in the teams container
- * @param {string} errorMessage - Error message to display
- */
-function showErrorMessage(errorMessage) {
-    const teamsContainer = document.getElementById('teamsContainer');
-    teamsContainer.innerHTML = `
-        <div class="alert alert-danger">
-            <i class="bi bi-exclamation-triangle"></i> ${errorMessage}
-        </div>
-    `;
-}
+// Duplicate function removed - using the one above
 
 /**
  * Displays a success message to the user
@@ -242,7 +373,7 @@ function showErrorMessage(errorMessage) {
  */
 function showSuccessMessage(successMessage) {
     // Create a temporary success alert
-    const teamsContainer = document.getElementById('teamsContainer');
+    const teamsContainer = document.getElementById('userTeamsContainer');
     const successAlert = document.createElement('div');
     successAlert.className = 'alert alert-success alert-dismissible fade show';
     successAlert.innerHTML = `

@@ -181,8 +181,8 @@ leagueSchema.virtual('isDraftComplete').get(function() {
 
 // Method to check if user can join league
 leagueSchema.methods.canUserJoin = function(userID) {
-    // Check if league is open for joining
-    if (this.status !== 'open') return false;
+    // Check if league is open for joining (allow both 'setup' and 'open' status)
+    if (this.status !== 'open' && this.status !== 'setup') return false;
 
     // Check if there are available spots
     if (this.participantCount >= this.maxParticipants) return false;
@@ -257,6 +257,12 @@ leagueSchema.index({ status: 1, classCode: 1 });
 
 // Create index for efficient participant queries
 leagueSchema.index({ 'participants.userID': 1, 'participants.isActive': 1 });
+
+// Create index for public leagues and date sorting
+leagueSchema.index({ isPublic: 1, dateCreated: -1 });
+
+// Create index for teacher's leagues
+leagueSchema.index({ createdByTeacherID: 1, dateCreated: -1 });
 
 const League = mongoose.model('League', leagueSchema);
 export default League;

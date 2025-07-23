@@ -1,4 +1,5 @@
 import express from 'express';
+import mongoose from 'mongoose';
 import { isAuthenticated, optionalAuthenticationAPI } from '../middleware/auth.js';
 import Team from '../models/Team.js';
 
@@ -10,12 +11,14 @@ router.get('/teams/:teamId', async (req, res) => {
         const { teamId } = req.params;
 
         const team = await Team.findById(teamId)
+            .select('-scoreHistory') // Exclude heavy score history
             .populate('ownerID', 'name email')
             .populate('leagueID', 'leagueName status isPublic')
             .populate({
                 path: 'roster.playerID',
-                select: 'name academicHistory weeklyStudyContributions'
-            });
+                select: 'name academicScore effortScore totalScore' // Only essential fields
+            })
+            .lean();
 
         if (!team) {
             return res.status(404).render('error', {
@@ -76,12 +79,14 @@ router.get('/api/teams/:teamId', optionalAuthenticationAPI, async (req, res) => 
         const { teamId } = req.params;
         
         const team = await Team.findById(teamId)
+            .select('-scoreHistory') // Exclude heavy score history
             .populate('ownerID', 'name email')
             .populate('leagueID', 'leagueName status')
             .populate({
                 path: 'roster.playerID',
-                select: 'name academicHistory weeklyStudyContributions'
-            });
+                select: 'name academicScore effortScore totalScore' // Only essential fields
+            })
+            .lean();
         
         if (!team) {
             return res.status(404).json({
@@ -131,24 +136,89 @@ router.get('/api/teams/:teamId', optionalAuthenticationAPI, async (req, res) => 
 // API endpoint to get user's teams in active leagues
 router.get('/api/teams/user/active', isAuthenticated, async (req, res) => {
     try {
+        const { page = 1, limit = 10 } = req.query;
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+
+        // Ensure user ID is properly converted to ObjectId
+        const userId = new mongoose.Types.ObjectId(req.session.user.id);
+
         const teams = await Team.find({
-            ownerID: req.session.user.id
+            ownerID: userId
         })
+        .select('-scoreHistory') // Exclude heavy score history
         .populate('leagueID', 'leagueName status')
         .populate({
             path: 'roster.playerID',
-            select: 'name academicScore effortScore totalScore'
+            select: 'name' // Only get name, scores are in currentScores
         })
-        .sort({ dateCreated: -1 }); // Newest first
+        .sort({ dateCreated: -1 })
+        .skip(skip)
+        .limit(parseInt(limit))
+        .lean(); // Use lean for better performance
 
         // Filter to only include teams in active leagues
         const activeTeams = teams.filter(team =>
             team.leagueID && team.leagueID.status === 'active'
         );
 
+        // Add roster count for each team
+        const teamsWithCounts = activeTeams.map(team => ({
+            ...team,
+            activeRosterCount: team.roster ? team.roster.filter(p => p.isActive).length : 0
+        }));
+
         res.json({
             success: true,
-            teams: activeTeams
+            teams: teamsWithCounts,
+            pagination: {
+                page: parseInt(page),
+                limit: parseInt(limit),
+                hasMore: teams.length === parseInt(limit)
+            }
+        });
+
+    } catch (error) {
+        console.error('Error fetching user teams:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// API endpoint to get all user's teams (not just active leagues) - optimized for performance
+router.get('/api/teams/user/all', isAuthenticated, async (req, res) => {
+    try {
+        const { page = 1, limit = 20 } = req.query;
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+
+        // Ensure user ID is properly converted to ObjectId
+        const userId = new mongoose.Types.ObjectId(req.session.user.id);
+
+        const teams = await Team.find({
+            ownerID: userId
+        })
+        .select('teamName leagueID currentScores dateCreated roster') // Only essential fields
+        .populate('leagueID', 'leagueName status')
+        .sort({ dateCreated: -1 })
+        .skip(skip)
+        .limit(parseInt(limit))
+        .lean();
+
+        // Add roster count for each team without populating players
+        const teamsWithCounts = teams.map(team => ({
+            ...team,
+            activeRosterCount: team.roster ? team.roster.filter(p => p.isActive).length : 0
+        }));
+
+        res.json({
+            success: true,
+            teams: teamsWithCounts,
+            pagination: {
+                page: parseInt(page),
+                limit: parseInt(limit),
+                hasMore: teams.length === parseInt(limit)
+            }
         });
 
     } catch (error) {

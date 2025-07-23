@@ -64,7 +64,7 @@
                                 <option value="drafting">Currently Drafting</option>
                                 <option value="active">Active</option>
                             </select>
-                            <button class="btn btn-outline-secondary" onclick="loadLeagues()">
+                            <button class="btn btn-outline-secondary" onclick="forceRefreshLeagues()">
                                 <i class="bi bi-arrow-clockwise"></i> Refresh
                             </button>
                         </div>
@@ -75,6 +75,11 @@
                                 <span class="visually-hidden">Loading...</span>
                             </div>
                         </div>
+                    </div>
+                    <div class="text-center mt-3">
+                        <button id="loadMoreBtn" class="btn btn-outline-primary" onclick="loadMoreLeagues()" style="display: none;">
+                            <i class="bi bi-arrow-down-circle"></i> Load More Leagues
+                        </button>
                     </div>
                 </div>
             </div>

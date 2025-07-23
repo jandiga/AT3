@@ -130,8 +130,8 @@ expressApplication.get('/leaderboard', (requestObject, responseObject) => {
 });
 
 // Team management interface - allows users to manage their teams
-expressApplication.get('/team-management', (requestObject, responseObject) => {
-    responseObject.render('team-management');
+expressApplication.get('/team-management', isAuthenticated, (requestObject, responseObject) => {
+    responseObject.render('team-management', { user: requestObject.session.user });
 });
 
 // User settings page - handles account preferences and configuration
@@ -147,34 +147,33 @@ expressApplication.get('/profile', async (requestObject, responseObject) => {
             return responseObject.redirect('/login');
         }
 
-        // Initialize profile data with basic user information
+        // Fetch complete user data from database
+        const UserModel = (await import('./src/models/User.js')).default;
+        const fullUserData = await UserModel.findById(requestObject.session.user.id);
+
+        if (!fullUserData) {
+            return responseObject.redirect('/login');
+        }
+
+        // Initialize profile data with complete user information
         let profileData = {
-            user: requestObject.session.user
+            user: fullUserData
         };
 
         // For student users, fetch their team information and player details
-        if (requestObject.session.user.role === 'Student') {
+        if (fullUserData.role === 'Student') {
             // Dynamic imports for database models
             const TeamModel = (await import('./src/models/Team.js')).default;
-            const UserModel = (await import('./src/models/User.js')).default;
 
-            // Retrieve complete user data including linked teams
-            const completeUserData = await UserModel.findById(requestObject.session.user.id)
-                .populate('linkedTeams');
+            // Query teams owned by this user
+            const userTeamsWithDetails = await TeamModel.find({
+                ownerID: fullUserData._id
+            })
+            .populate('roster.playerID', 'name academicHistory weeklyStudyContributions')
+            .populate('leagueID', 'leagueName status')
+            .sort({ dateCreated: -1 }); // Sort by creation date, newest first
 
-            // If user has associated teams, fetch detailed team information
-            if (completeUserData && completeUserData.linkedTeams && completeUserData.linkedTeams.length > 0) {
-                // Query teams with populated player rosters and league information
-                const userTeamsWithDetails = await TeamModel.find({
-                    _id: { $in: completeUserData.linkedTeams },
-                    ownerID: requestObject.session.user.id
-                })
-                .populate('roster.playerID', 'name academicHistory weeklyStudyContributions')
-                .populate('leagueID', 'leagueName status')
-                .sort({ dateCreated: -1 }); // Sort by creation date, newest first
-
-                profileData.teams = userTeamsWithDetails;
-            }
+            profileData.teams = userTeamsWithDetails;
         }
 
         responseObject.render('profile', profileData);

@@ -7,8 +7,6 @@ const connectDB = async () => {
     return new Promise((resolve) => {
         try {
             const options = {
-                useNewUrlParser: true,
-                useUnifiedTopology: true,
                 serverSelectionTimeoutMS: 5000, // Shorter timeout
                 socketTimeoutMS: 10000, // Shorter timeout
                 family: 4, // Use IPv4, skip trying IPv6
@@ -16,7 +14,12 @@ const connectDB = async () => {
                 w: 'majority',
                 ssl: true,
                 tlsAllowInvalidCertificates: true,
-                tlsAllowInvalidHostnames: true
+                tlsAllowInvalidHostnames: true,
+                // Connection pooling for better performance
+                maxPoolSize: 10, // Maintain up to 10 socket connections
+                minPoolSize: 2,  // Maintain a minimum of 2 socket connections
+                maxIdleTimeMS: 30000, // Close connections after 30 seconds of inactivity
+                bufferCommands: false, // Disable mongoose buffering
             };
 
             mongoose.connect(process.env.MONGODB_URI, options)
